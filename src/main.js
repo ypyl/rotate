@@ -1,8 +1,8 @@
 import { Elm } from './Main.elm'
 
-Elm.Main.init({
+const app = Elm.Main.init({
   node: document.getElementById('app'),
-  flags: "test"
+  flags: [window.innerWidth, window.innerHeight]
 })
 
-window.Neutralino.init();
+window.Neutralino.init()

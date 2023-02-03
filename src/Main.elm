@@ -5,9 +5,10 @@ import Element exposing (Element, el, text, row, alignRight, fill, width, rgb255
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
+import Browser.Events exposing (onResize)
 
 
-main : Program String Model Msg
+main : Program (Int, Int) Model Msg
 main =
     Browser.element
         { init = init
@@ -33,21 +34,24 @@ myElement model =
         , Border.rounded 3
         , padding 30
         ]
-        (text model.message)
+        (text (String.fromInt(model.windowWidth) ++ "x" ++ String.fromInt(model.windowHeight)))
 
 
 type alias Model =
     { message : String
+    , windowWidth : Int
+    , windowHeight : Int
     }
 
 
-init : String -> ( Model, Cmd Msg )
-init initialMesssage =
-    ( { message = initialMesssage }, Cmd.none )
+init : (Int, Int) -> ( Model, Cmd Msg )
+init (windowWidth, windowHeight) =
+    ( { message = "hey", windowWidth = windowWidth, windowHeight = windowHeight }, Cmd.none )
 
 
 type Msg
     = Name String
+    | SetWindowWidthHeight Int Int
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -55,8 +59,10 @@ update msg model =
     case msg of
         Name name ->
             ( { model | message = name }, Cmd.none )
+        SetWindowWidthHeight width height ->
+            ( { model | windowWidth = width, windowHeight = height }, Cmd.none)
 
 
 subscriptions : Model -> Sub Msg
 subscriptions _ =
-    Sub.none
+    onResize (\w h -> SetWindowWidthHeight w h)
