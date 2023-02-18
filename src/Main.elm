@@ -2,18 +2,22 @@ module Main exposing (main)
 
 import Browser
 import Browser.Events exposing (onResize)
+import Colors exposing (black, blue, blueFocused, gray, grayColorbackground, grayFocused, white)
+import Config exposing (dayTitleSize, taskSize, weekDayWidth)
 import Derberos.Date.Core exposing (civilToPosix, newDateRecord, posixToCivil)
-import Derberos.Date.Delta exposing (addDays, addMonths, addYears)
-import Element exposing (Element, alignRight, centerX, centerY, el, fill, height, inFront, padding, paddingXY, px, rgb255, rgba255, row, shrink, spacing, text, width)
+import Derberos.Date.Delta exposing (addDays)
+import Element exposing (Element, alignRight, alignTop, centerX, centerY, column, el, fill, focused, height, html, inFront, layout, padding, paddingXY, px, rgb255, row, spacing, text, width)
 import Element.Background as Background
 import Element.Border as Border
+import Element.Events exposing (onDoubleClick)
 import Element.Font as Font
-import Element.Input exposing (button)
+import Element.Input as Input exposing (button, labelHidden)
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
+import Mappers exposing (posixToDateStr, toPosix, toStrPosix)
 import Task
-import Time
+import Time exposing (now)
 
 
 main : Program ( Int, Int ) Model Msg
@@ -31,13 +35,13 @@ view model =
     let
         modalWindow =
             case model.editTask of
-                Just t ->
+                Just (EditTask _ t) ->
                     [ grayBackground t |> inFront ]
 
                 Nothing ->
                     []
     in
-    Element.layout modalWindow (daysView model)
+    layout modalWindow (daysView model)
 
 
 type alias Model =
@@ -46,14 +50,13 @@ type alias Model =
     , windowHeight : Int
     , startDate : Time.Posix
     , zone : Time.Zone
-    , tasks : List TodoTask
-    , editTask : Maybe TaskValue
+    , tasks : List TaskValue
+    , editTask : Maybe EditTask
     }
 
 
-type TodoTask
-    = View TaskValue
-    | Edit TaskValue
+type EditTask
+    = EditTask TaskValue TaskValue
 
 
 type alias TaskValue =
@@ -86,19 +89,27 @@ init ( windowWidth, windowHeight ) =
       , startDate = initialDateValue
       , zone = Time.utc
       , tasks =
-            [ View { value = "first", createdDate = initialDateValue, editDate = initialDateValue, status = Active, taskType = Single }
-            , View { value = "second", createdDate = initialDateValue, editDate = initialDateValue, status = Active, taskType = Single }
-            , View { value = "third", createdDate = initialDateValue, editDate = initialDateValue, status = Done, taskType = Single }
+            [ { value = "first", createdDate = initialDateValue, editDate = initialDateValue, status = Active, taskType = Single }
+            , { value = "second", createdDate = initialDateValue, editDate = initialDateValue, status = Active, taskType = Single }
+            , { value = "third", createdDate = initialDateValue, editDate = initialDateValue, status = Done, taskType = Single }
             ]
-      , editTask = Just { value = "second", createdDate = initialDateValue, editDate = initialDateValue, status = Active, taskType = Single }
+      , editTask = Nothing
       }
     , Task.perform NewTime Time.now
     )
 
 
+editTaskSample =
+    let
+        t =
+            { value = "second", createdDate = initialDateValue, editDate = initialDateValue, status = Active, taskType = Single }
+    in
+    EditTask t t
+
+
 initialDateValue : Time.Posix
 initialDateValue =
-    newDateRecord 2023 2 16 10 0 0 0 Time.utc
+    newDateRecord 2023 2 22 10 0 0 0 Time.utc
         |> civilToPosix
 
 
@@ -107,8 +118,10 @@ type Msg
     | SetWindowWidthHeight Int Int
     | NewTime Time.Posix
     | ChangeStartDate String
-    | SaveTask TaskValue
+    | SaveTask
     | CancelEdit
+    | EditValue String
+    | EditTaskMsg TaskValue
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -135,33 +148,26 @@ update msg model =
             in
             ( { model | startDate = newStartDate }, Cmd.none )
 
-        SaveTask _ ->
+        SaveTask ->
             ( model, Cmd.none )
 
         CancelEdit ->
             ( { model | editTask = Nothing }, Cmd.none )
 
+        EditValue newValue ->
+            case model.editTask of
+                Just (EditTask originalTask t) ->
+                    let
+                        updatedTask =
+                            { t | value = newValue }
+                    in
+                    ( { model | editTask = Just (EditTask originalTask updatedTask) }, Cmd.none )
 
-toPosix : Time.Zone -> Time.Posix -> String -> String -> String -> Time.Posix
-toPosix zone default yearStr monthStr dayStr =
-    let
-        year =
-            String.toInt yearStr
+                Nothing ->
+                    ( model, Cmd.none )
 
-        -- TODO additional check > 0 && < 13
-        month =
-            String.toInt monthStr
-
-        -- TODO additional check for day?
-        day =
-            String.toInt dayStr
-    in
-    case ( year, month, day ) of
-        ( Just y, Just m, Just d ) ->
-            Time.millisToPosix 0 |> addYears (y - 1970) |> addMonths (m - 1) zone |> addDays (d - 1)
-
-        _ ->
-            default
+        EditTaskMsg task ->
+            ( { model | editTask = Just (EditTask task task) }, Cmd.none )
 
 
 subscriptions : Model -> Sub Msg
@@ -185,75 +191,20 @@ dateAreTheSame time1 time2 =
     t1.year == t2.year && t1.month == t2.month && t1.day == t2.day
 
 
-toStrPosix : Time.Zone -> Time.Posix -> String
-toStrPosix zone time =
-    let
-        toStrMonth : Time.Month -> String
-        toStrMonth month =
-            case month of
-                Time.Jan ->
-                    "Jan"
-
-                Time.Feb ->
-                    "Feb"
-
-                Time.Mar ->
-                    "Mar"
-
-                Time.Apr ->
-                    "Apr"
-
-                Time.May ->
-                    "May"
-
-                Time.Jun ->
-                    "Jun"
-
-                Time.Jul ->
-                    "Jul"
-
-                Time.Aug ->
-                    "Aug"
-
-                Time.Sep ->
-                    "Sep"
-
-                Time.Oct ->
-                    "Oct"
-
-                Time.Nov ->
-                    "Nov"
-
-                Time.Dec ->
-                    "Dec"
-    in
-    String.fromInt (Time.toDay zone time) ++ ", " ++ toStrMonth (Time.toMonth zone time) ++ " " ++ String.fromInt (Time.toYear zone time)
-
-
 
 -- UI ELEMENTS
 
 
-dayTitleSize : number
-dayTitleSize =
-    30
-
-
-taskSize : number
-taskSize =
-    20
-
-
 dayTitle : String -> Element msg
 dayTitle value =
-    el [ Font.bold, height (Element.px dayTitleSize), centerX ] (text value)
+    el [ Font.bold, height (px dayTitleSize), centerX ] (text value)
 
 
-taskValueView : TaskStatus -> String -> Element msg
-taskValueView status value =
+taskValueView : TaskValue -> Element Msg
+taskValueView task =
     let
         extraAttr =
-            case status of
+            case task.status of
                 Done ->
                     [ Font.strike ]
 
@@ -268,19 +219,21 @@ taskValueView status value =
     in
     el
         ([ width fill
-         , height (Element.px taskSize)
+         , height (px taskSize)
          , Border.widthEach { bottom = 1, top = 0, left = 0, right = 0 }
          , Border.color (rgb255 0 0 0)
          , paddingXY 3 0
+         , onDoubleClick (EditTaskMsg task)
+         , Html.Attributes.class "no-select" |> Element.htmlAttribute
          ]
             ++ extraAttr
         )
-        (text value)
+        (text task.value)
 
 
-weekDayWidth : number
-weekDayWidth =
-    250
+emptyTaskValue : Time.Posix -> TaskValue
+emptyTaskValue date =
+    { value = "", status = Active, createdDate = date, editDate = date, taskType = Single }
 
 
 weekDay : Model -> Int -> Element Msg
@@ -293,7 +246,7 @@ weekDay model dayDelta =
             filteredTaskPerDay weekDayDate model.tasks
 
         emptyTasks count =
-            List.repeat count (taskValueView Active "")
+            List.repeat count (taskValueView (emptyTaskValue weekDayDate))
 
         totalCountOfTasksToShow =
             numberOfTaskToShow model.windowHeight
@@ -307,7 +260,7 @@ weekDay model dayDelta =
 
         title =
             if dayDelta == 0 then
-                Element.row [ width fill, spacing 5 ]
+                row [ width fill, spacing 5 ]
                     [ dayInput model.zone model.startDate
                     , dayTitle (toStrPosix model.zone weekDayDate)
                     ]
@@ -316,21 +269,16 @@ weekDay model dayDelta =
                 dayTitle (toStrPosix model.zone weekDayDate)
 
         viewTask task =
-            case task of
-                View t ->
-                    taskValueView t.status t.value
-
-                Edit _ ->
-                    Debug.todo "Edit task view"
+            taskValueView task
     in
-    Element.column
-        [ Font.color (rgb255 0 0 0)
-        , Border.color (rgb255 0 0 0)
+    column
+        [ Font.color black
+        , Border.color black
 
         --, Border.width 1
         , Border.rounded 3
         , padding 3
-        , width (Element.px weekDayWidth)
+        , width (px weekDayWidth)
         ]
         (title :: List.map viewTask weekDayTasks ++ emptyTasks emptyTaskCount)
 
@@ -339,16 +287,11 @@ weekDay model dayDelta =
 -- TODO use dict to find tasks for days (there will be a special case for different types)
 
 
-filteredTaskPerDay : Time.Posix -> List TodoTask -> List TodoTask
+filteredTaskPerDay : Time.Posix -> List TaskValue -> List TaskValue
 filteredTaskPerDay date tasks =
     let
         filterFunc task =
-            case task of
-                View t ->
-                    dateAreTheSame t.createdDate date
-
-                Edit t ->
-                    dateAreTheSame t.createdDate date
+            dateAreTheSame task.createdDate date
     in
     List.filter filterFunc tasks
 
@@ -377,71 +320,8 @@ numberOfWeekDayToShow viewWidth =
 dayInput : Time.Zone -> Time.Posix -> Element Msg
 dayInput zone time =
     Html.input [ Html.Attributes.type_ "date", Html.Attributes.value (posixToDateStr zone time), Html.Events.onInput ChangeStartDate ] []
-        |> Element.html
-        |> el [ Element.alignTop ]
-
-
-posixToDateStr : Time.Zone -> Time.Posix -> String
-posixToDateStr zone time =
-    String.fromInt (Time.toYear zone time)
-        ++ "-"
-        ++ toIntStrMonth (Time.toMonth zone time)
-        ++ "-"
-        ++ adjustDay (Time.toDay zone time)
-
-
-adjustDay : Int -> String
-adjustDay val =
-    if val < 10 then
-        "0" ++ String.fromInt val
-
-    else
-        String.fromInt val
-
-
-toIntStrMonth : Time.Month -> String
-toIntStrMonth month =
-    case month of
-        Time.Jan ->
-            "01"
-
-        Time.Feb ->
-            "02"
-
-        Time.Mar ->
-            "03"
-
-        Time.Apr ->
-            "04"
-
-        Time.May ->
-            "05"
-
-        Time.Jun ->
-            "06"
-
-        Time.Jul ->
-            "07"
-
-        Time.Aug ->
-            "08"
-
-        Time.Sep ->
-            "09"
-
-        Time.Oct ->
-            "10"
-
-        Time.Nov ->
-            "11"
-
-        Time.Dec ->
-            "12"
-
-
-grayColorbackground : Element.Color
-grayColorbackground =
-    rgba255 107 114 128 0.6
+        |> html
+        |> el [ alignTop ]
 
 
 grayBackground : TaskValue -> Element Msg
@@ -451,11 +331,11 @@ grayBackground taskValue =
         , height fill
         , Background.color grayColorbackground
         ]
-        (modal taskValue)
+        (modalView taskValue)
 
 
-modal : TaskValue -> Element Msg
-modal taskValue =
+modalView : TaskValue -> Element Msg
+modalView taskValue =
     el
         [ centerX
         , centerY
@@ -463,51 +343,44 @@ modal taskValue =
         , Background.color white
         , Border.rounded 5
         ]
-        (modalFooter taskValue)
+        (editTaskView taskValue)
 
 
-modalFooter : TaskValue -> Element Msg
-modalFooter taskValue =
-    Element.column [ width fill, padding 10 ]
-        [ text "Some data"
-        , row [ width fill, spacing 10 ] [ cancelButton, saveButton taskValue ] ]
+editTaskView : TaskValue -> Element Msg
+editTaskView taskValue =
+    column [ width fill, padding 10, spacing 10 ]
+        [ inputValueView taskValue.value
+        , modalFooter
+        ]
 
 
-gray : Element.Color
-gray =
-    rgb255 107 114 128
+inputValueView : String -> Element Msg
+inputValueView value =
+    Input.text []
+        { onChange = EditValue
+        , text = value
+        , placeholder = Nothing
+        , label = labelHidden "editValue"
+        }
 
 
-grayFocused : Element.Color
-grayFocused =
-    rgb255 55 65 81
+modalFooter : Element Msg
+modalFooter =
+    row [ width fill, spacing 10 ] [ cancelButton, saveButton ]
 
 
-blue : Element.Color
-blue =
-    Element.rgb255 59 139 246
-
-white : Element.Color
-white =
-    Element.rgb255 255 255 255
-
-blueFocused : Element.Color
-blueFocused =
-    rgb255 29 78 216
-
-
-saveButton : TaskValue -> Element Msg
-saveButton taskValue =
+saveButton : Element Msg
+saveButton =
     button
         [ Background.color blue
         , alignRight
         , padding 10
         , Border.rounded 5
         , Font.color white
-        , Element.focused
+        , focused
             [ Background.color blueFocused ]
         ]
-        { onPress = Just (SaveTask taskValue)
+        { onPress = Just SaveTask
         , label = text "Save"
         }
 
@@ -520,7 +393,7 @@ cancelButton =
         , Border.rounded 5
         , alignRight
         , Font.color white
-        , Element.focused
+        , focused
             [ Background.color grayFocused ]
         ]
         { onPress = Just CancelEdit
