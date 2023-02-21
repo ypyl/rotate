@@ -4,20 +4,26 @@ import Browser
 import Browser.Events exposing (onResize)
 import Colors exposing (black, blue, blueFocused, gray, grayColorbackground, grayFocused, white)
 import Config exposing (dayTitleSize, taskSize, weekDayWidth)
+import Cron exposing (Cron)
+import Date exposing (Date, Unit(..), add, format, today)
+import DatePicker exposing (ChangeEvent(..))
 import Derberos.Date.Core exposing (civilToPosix, newDateRecord, posixToCivil)
 import Derberos.Date.Delta exposing (addDays)
-import Element exposing (Element, alignRight, alignTop, centerX, centerY, column, el, fill, focused, height, html, inFront, layout, padding, paddingXY, px, rgb255, row, spacing, text, width)
+import Element exposing (Element, alignRight, alignTop, centerX, centerY, column, el, fill, focused, height, html, inFront, layout, padding, paddingEach, paddingXY, px, rgb255, row, spacing, text, width)
 import Element.Background as Background
 import Element.Border as Border
-import Element.Events exposing (onDoubleClick)
+import Element.Events exposing (onClick, onDoubleClick)
 import Element.Font as Font
 import Element.Input as Input exposing (button, labelHidden)
 import Html exposing (Html)
-import Html.Attributes
+import Html.Attributes exposing (style)
 import Html.Events
 import Mappers exposing (posixToDateStr, toPosix, toStrPosix)
 import Task
-import Time exposing (now)
+import Time exposing (Month(..), now)
+import TypedSvg exposing (circle, line, path, svg)
+import TypedSvg.Attributes exposing (cx, cy, d, r, stroke, strokeLinecap, strokeLinejoin, strokeWidth, viewBox, x1, x2, y1, y2)
+import TypedSvg.Types exposing (Length(..), Paint(..), StrokeLinecap(..), StrokeLinejoin(..))
 
 
 main : Program ( Int, Int ) Model Msg
@@ -48,10 +54,17 @@ type alias Model =
     { message : String
     , windowWidth : Int
     , windowHeight : Int
-    , startDate : Time.Posix
-    , zone : Time.Zone
+    , today : Date
+    , startDate : DateModel
     , tasks : List TaskValue
     , editTask : Maybe EditTask
+    }
+
+
+type alias DateModel =
+    { date : Date
+    , dateText : String
+    , pickerModel : DatePicker.Model
     }
 
 
@@ -61,8 +74,9 @@ type EditTask
 
 type alias TaskValue =
     { value : String
-    , createdDate : Time.Posix
-    , editDate : Time.Posix
+    , createdDate : Date
+    , editDate : Date
+    , date : Date
     , status : TaskStatus
     , taskType : TaskType
     }
@@ -70,7 +84,7 @@ type alias TaskValue =
 
 type TaskType
     = Single
-    | Cron
+    | CronType Cron
     | Slide
 
 
@@ -86,42 +100,57 @@ init ( windowWidth, windowHeight ) =
     ( { message = "hey"
       , windowWidth = windowWidth
       , windowHeight = windowHeight
-      , startDate = initialDateValue
-      , zone = Time.utc
+      , startDate = initialStartDate
+      , today = initialDateValue
       , tasks =
-            [ { value = "first", createdDate = initialDateValue, editDate = initialDateValue, status = Active, taskType = Single }
-            , { value = "second", createdDate = initialDateValue, editDate = initialDateValue, status = Active, taskType = Single }
-            , { value = "third", createdDate = initialDateValue, editDate = initialDateValue, status = Done, taskType = Single }
+            [ { value = "first", date = initialDateValue, createdDate = initialDateValue, editDate = initialDateValue, status = Active, taskType = Single }
+            , { value = "second", date = initialDateValue, createdDate = initialDateValue, editDate = initialDateValue, status = Active, taskType = Slide }
+            , { value = "third", date = initialDateValue, createdDate = initialDateValue, editDate = initialDateValue, status = Done, taskType = Single }
             ]
       , editTask = Nothing
       }
-    , Task.perform NewTime Time.now
+    , Task.perform GetToday today
     )
 
 
 editTaskSample =
     let
         t =
-            { value = "second", createdDate = initialDateValue, editDate = initialDateValue, status = Active, taskType = Single }
+            { value = "second"
+            , date = initialDateValue
+            , createdDate = initialDateValue
+            , editDate = initialDateValue
+            , status = Active
+            , taskType = Single
+            }
     in
     EditTask t t
 
 
-initialDateValue : Time.Posix
+initialStartDate =
+    { date = initialDateValue
+    , dateText = ""
+    , pickerModel = DatePicker.init
+    }
+
+
+initialDateValue : Date
 initialDateValue =
-    newDateRecord 2023 2 22 10 0 0 0 Time.utc
-        |> civilToPosix
+    Date.fromCalendarDate 2023 Feb 26
 
 
 type Msg
     = Name String
     | SetWindowWidthHeight Int Int
-    | NewTime Time.Posix
-    | ChangeStartDate String
+    | GetToday Date
+    | ChangeStartDate ChangeEvent
     | SaveTask
     | CancelEdit
     | EditValue String
     | EditTaskMsg TaskValue
+    | EditTaskType TaskType
+    | EditCronValue String
+    | OpenStartDateDialog
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -133,20 +162,70 @@ update msg model =
         SetWindowWidthHeight width height ->
             ( { model | windowWidth = width, windowHeight = height }, Cmd.none )
 
-        NewTime time ->
-            ( { model | startDate = time }, Cmd.none )
-
-        ChangeStartDate startDate ->
+        GetToday date ->
             let
-                newStartDate =
-                    case String.split "-" startDate of
-                        year :: month :: day :: _ ->
-                            toPosix model.zone model.startDate year month day
+                startDateModel =
+                    model.startDate
 
-                        _ ->
-                            model.startDate
+                updatedStartDate =
+                    { startDateModel
+                        | date = date
+                        , dateText = Date.toIsoString date
+                        , pickerModel =
+                            startDateModel.pickerModel
+                                |> DatePicker.setToday date
+                    }
             in
-            ( { model | startDate = newStartDate }, Cmd.none )
+            ( { model | today = date, startDate = updatedStartDate }
+            , Cmd.none
+            )
+
+        ChangeStartDate changeEvent ->
+            let
+                startDateModel =
+                    model.startDate
+            in
+            case changeEvent of
+                DateChanged date ->
+                    let
+                        updatedStartDate =
+                            { startDateModel
+                                | date = date
+                                , dateText = Date.toIsoString date
+                            }
+                    in
+                    ( { model | startDate = updatedStartDate }
+                    , Cmd.none
+                    )
+
+                TextChanged text ->
+                    let
+                        updatedStartDate =
+                            { startDateModel
+                                | date =
+                                    -- parse the text in any way you like
+                                    Date.fromIsoString text
+                                        |> Result.toMaybe
+                                        |> Maybe.withDefault model.today
+                                , dateText = text
+                            }
+                    in
+                    ( { model | startDate = updatedStartDate }
+                    , Cmd.none
+                    )
+
+                PickerChanged subMsg ->
+                    let
+                        updatedStartDate =
+                            { startDateModel
+                                | pickerModel =
+                                    startDateModel.pickerModel
+                                        |> DatePicker.update subMsg
+                            }
+                    in
+                    ( { model | startDate = updatedStartDate }
+                    , Cmd.none
+                    )
 
         SaveTask ->
             ( model, Cmd.none )
@@ -169,26 +248,41 @@ update msg model =
         EditTaskMsg task ->
             ( { model | editTask = Just (EditTask task task) }, Cmd.none )
 
+        EditTaskType taskType ->
+            case model.editTask of
+                Just (EditTask originalTask t) ->
+                    let
+                        updatedTask =
+                            { t | taskType = taskType }
+                    in
+                    ( { model | editTask = Just (EditTask originalTask updatedTask) }, Cmd.none )
+
+                Nothing ->
+                    ( model, Cmd.none )
+
+        EditCronValue cronValue ->
+            ( model, Cmd.none )
+
+        OpenStartDateDialog ->
+            let
+                startDateModel =
+                    model.startDate
+
+                updatedStartDate =
+                    { startDateModel
+                        | pickerModel =
+                            startDateModel.pickerModel
+                                |> DatePicker.open
+                    }
+            in
+            ( { model | startDate = updatedStartDate }
+            , Cmd.none
+            )
+
 
 subscriptions : Model -> Sub Msg
 subscriptions _ =
     onResize (\w h -> SetWindowWidthHeight w h)
-
-
-
--- TIME utils
-
-
-dateAreTheSame : Time.Posix -> Time.Posix -> Bool
-dateAreTheSame time1 time2 =
-    let
-        t1 =
-            posixToCivil time1
-
-        t2 =
-            posixToCivil time2
-    in
-    t1.year == t2.year && t1.month == t2.month && t1.day == t2.day
 
 
 
@@ -231,16 +325,16 @@ taskValueView task =
         (text task.value)
 
 
-emptyTaskValue : Time.Posix -> TaskValue
+emptyTaskValue : Date -> TaskValue
 emptyTaskValue date =
-    { value = "", status = Active, createdDate = date, editDate = date, taskType = Single }
+    { value = "", status = Active, date = date, createdDate = date, editDate = date, taskType = Single }
 
 
 weekDay : Model -> Int -> Element Msg
 weekDay model dayDelta =
     let
         weekDayDate =
-            addDays dayDelta model.startDate
+            add Days dayDelta model.startDate.date
 
         weekDayTasks =
             filteredTaskPerDay weekDayDate model.tasks
@@ -261,12 +355,12 @@ weekDay model dayDelta =
         title =
             if dayDelta == 0 then
                 row [ width fill, spacing 5 ]
-                    [ dayInput model.zone model.startDate
-                    , dayTitle (toStrPosix model.zone weekDayDate)
+                    [ dayInput model.startDate
+                    , dayTitle (format "E, d MMM y" weekDayDate)
                     ]
 
             else
-                dayTitle (toStrPosix model.zone weekDayDate)
+                dayTitle (format "E, d MMM y" weekDayDate)
 
         viewTask task =
             taskValueView task
@@ -287,11 +381,11 @@ weekDay model dayDelta =
 -- TODO use dict to find tasks for days (there will be a special case for different types)
 
 
-filteredTaskPerDay : Time.Posix -> List TaskValue -> List TaskValue
+filteredTaskPerDay : Date -> List TaskValue -> List TaskValue
 filteredTaskPerDay date tasks =
     let
         filterFunc task =
-            dateAreTheSame task.createdDate date
+            task.date == date
     in
     List.filter filterFunc tasks
 
@@ -317,11 +411,61 @@ numberOfWeekDayToShow viewWidth =
     viewWidth // weekDayWidth - 1
 
 
-dayInput : Time.Zone -> Time.Posix -> Element Msg
-dayInput zone time =
-    Html.input [ Html.Attributes.type_ "date", Html.Attributes.value (posixToDateStr zone time), Html.Events.onInput ChangeStartDate ] []
-        |> html
-        |> el [ alignTop ]
+dayInput : DateModel -> Element Msg
+dayInput model =
+    row [ alignTop ]
+        [ calendarIcon
+        , DatePicker.input [ width (px 0), height (px 0), alignTop, Border.width 0, focused [] ]
+            { onChange = ChangeStartDate
+            , selected = Just model.date
+            , text = model.dateText
+            , label = Input.labelHidden "dayInput"
+            , placeholder = Nothing
+            , settings = settings
+            , model = model.pickerModel
+            }
+        ]
+
+
+calendarIcon : Element Msg
+calendarIcon =
+    el [ height (px 24), width (px 24), alignTop, onClick OpenStartDateDialog ]
+        (svg
+            [ style "vertical-align" "middle"
+            , TypedSvg.Attributes.width <| Px 24
+            , TypedSvg.Attributes.height <| Px 24
+            , viewBox 0 0 24 24
+            , strokeWidth <| Px 1
+            , TypedSvg.Attributes.fill PaintNone
+            , strokeLinecap StrokeLinecapRound
+            , strokeLinejoin StrokeLinejoinRound
+            ]
+            [ path [ stroke PaintNone, d "M0 0h24v24H0z", TypedSvg.Attributes.fill PaintNone ] []
+            , path [ d "M4 5m0 2a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2z" ] []
+            , path [ d "M16 3l0 4" ] []
+            , path [ d "M8 3l0 4" ] []
+            , path [ d "M4 11l16 0" ] []
+            , path [ d "M8 15h2v2h-2z" ] []
+            ]
+            |> Element.html
+        )
+
+
+settings : DatePicker.Settings
+settings =
+    let
+        default =
+            DatePicker.defaultSettings
+    in
+    { default
+        | pickerAttributes =
+            [ Background.color white
+            , padding 10
+            , Border.color black
+            , Border.width 1
+            , Border.rounded 5
+            ]
+    }
 
 
 grayBackground : TaskValue -> Element Msg
@@ -350,6 +494,7 @@ editTaskView : TaskValue -> Element Msg
 editTaskView taskValue =
     column [ width fill, padding 10, spacing 10 ]
         [ inputValueView taskValue.value
+        , inputTaskView taskValue.taskType
         , modalFooter
         ]
 
@@ -361,6 +506,35 @@ inputValueView value =
         , text = value
         , placeholder = Nothing
         , label = labelHidden "editValue"
+        }
+
+
+defaultCron : Cron
+defaultCron =
+    Cron.Cron Cron.Every Cron.Every Cron.Every Cron.Every Cron.Every
+
+
+inputTaskView : TaskType -> Element Msg
+inputTaskView taskType =
+    Input.radioRow [ spacing 10 ]
+        { onChange = EditTaskType
+        , options =
+            [ Input.option Single (text "Single")
+            , Input.option (CronType defaultCron) (text "Cron")
+            , Input.option Slide (text "Slide")
+            ]
+        , selected = Just taskType
+        , label = Input.labelHidden "inputTaskView"
+        }
+
+
+inputCronView : String -> Element Msg
+inputCronView value =
+    Input.text []
+        { onChange = EditCronValue
+        , text = value
+        , placeholder = Nothing
+        , label = labelHidden "editCronValue"
         }
 
 
