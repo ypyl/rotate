@@ -7,9 +7,7 @@ import Config exposing (dayTitleSize, taskSize, weekDayWidth)
 import Cron exposing (Cron)
 import Date exposing (Date, Unit(..), add, format, today)
 import DatePicker exposing (ChangeEvent(..))
-import Derberos.Date.Core exposing (civilToPosix, newDateRecord, posixToCivil)
-import Derberos.Date.Delta exposing (addDays)
-import Element exposing (Element, alignRight, alignTop, centerX, centerY, column, el, fill, focused, height, html, inFront, layout, padding, paddingEach, paddingXY, px, rgb255, row, spacing, text, width)
+import Element exposing (Element, alignRight, alignTop, centerX, centerY, column, el, fill, focused, height, inFront, layout, padding, paddingXY, px, rgb255, row, spacing, text, width)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Events exposing (onClick, onDoubleClick)
@@ -17,13 +15,14 @@ import Element.Font as Font
 import Element.Input as Input exposing (button, labelHidden)
 import Html exposing (Html)
 import Html.Attributes exposing (style)
-import Html.Events
-import Mappers exposing (posixToDateStr, toPosix, toStrPosix)
 import Task
-import Time exposing (Month(..), now)
-import TypedSvg exposing (circle, line, path, svg)
-import TypedSvg.Attributes exposing (cx, cy, d, r, stroke, strokeLinecap, strokeLinejoin, strokeWidth, viewBox, x1, x2, y1, y2)
+import Time exposing (Month(..))
+import TypedSvg exposing (path, svg)
+import TypedSvg.Attributes exposing (d, stroke, strokeLinecap, strokeLinejoin, strokeWidth, viewBox)
 import TypedSvg.Types exposing (Length(..), Paint(..), StrokeLinecap(..), StrokeLinejoin(..))
+import Element exposing (none)
+import Humanizer exposing (toString)
+import Mappers exposing (cronToString)
 
 
 main : Program ( Int, Int ) Model Msg
@@ -113,20 +112,7 @@ init ( windowWidth, windowHeight ) =
     )
 
 
-editTaskSample =
-    let
-        t =
-            { value = "second"
-            , date = initialDateValue
-            , createdDate = initialDateValue
-            , editDate = initialDateValue
-            , status = Active
-            , taskType = Single
-            }
-    in
-    EditTask t t
-
-
+initialStartDate : { date : Date, dateText : String, pickerModel : DatePicker.Model }
 initialStartDate =
     { date = initialDateValue
     , dateText = ""
@@ -228,7 +214,12 @@ update msg model =
                     )
 
         SaveTask ->
-            ( model, Cmd.none )
+            case model.editTask of
+                Just (EditTask originalTask updatedTask) ->
+                    ( { model | tasks = replaceTask originalTask updatedTask model.tasks, editTask = Nothing }, Cmd.none )
+
+                Nothing ->
+                    ( model, Cmd.none )
 
         CancelEdit ->
             ( { model | editTask = Nothing }, Cmd.none )
@@ -279,6 +270,17 @@ update msg model =
             , Cmd.none
             )
 
+
+replaceTask: TaskValue -> TaskValue -> List TaskValue -> List TaskValue
+replaceTask toReplace newTask list =
+    let
+        check taskValue result =
+            if taskValue == toReplace then
+                newTask :: result
+            else
+                taskValue :: result
+    in
+    List.foldl check [] list |> List.reverse
 
 subscriptions : Model -> Sub Msg
 subscriptions _ =
@@ -495,6 +497,9 @@ editTaskView taskValue =
     column [ width fill, padding 10, spacing 10 ]
         [ inputValueView taskValue.value
         , inputTaskView taskValue.taskType
+        , case taskValue.taskType of
+            CronType cronValue -> inputCronView (cronToString cronValue)
+            _ -> none
         , modalFooter
         ]
 

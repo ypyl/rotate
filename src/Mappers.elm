@@ -1,129 +1,181 @@
-module Mappers exposing (..)
+module Mappers exposing (cronToString)
 
-import Derberos.Date.Delta exposing (addDays, addMonths, addYears)
-import Time exposing (Month)
+import Cron exposing (Atom(..), Cron(..), Expr(..), Month(..), Term(..), WeekDay(..))
 
 
-toIntStrMonth : Month -> String
-toIntStrMonth month =
+cronToString : Cron -> String
+cronToString (Cron _ _ day month week) =
+    [ exprIntToString day, exprMonthToString month, exprWeekDayToString week ] |> String.join " "
+
+
+exprIntToString : Expr Int -> String
+exprIntToString expr =
+    case expr of
+        Single term ->
+            termIntToString term
+
+        Multiple items ->
+            items |> List.map termIntToString |> String.join ","
+
+        Every ->
+            "*"
+
+
+exprMonthToString : Expr Month -> String
+exprMonthToString expr =
+    case expr of
+        Single term ->
+            termMonthToString term
+
+        Multiple items ->
+            items |> List.map termMonthToString |> String.join ","
+
+        Every ->
+            "*"
+
+
+exprWeekDayToString : Expr WeekDay -> String
+exprWeekDayToString expr =
+    case expr of
+        Single term ->
+            termWeekDayToString term
+
+        Multiple items ->
+            items |> List.map termWeekDayToString |> String.join ","
+
+        Every ->
+            "*"
+
+
+termIntToString : Term Int -> String
+termIntToString term =
+    case term of
+        Step atom value ->
+            atomIntToString atom ++ "/" ++ String.fromInt value
+
+        EveryStep value ->
+            "*/" ++ String.fromInt value
+
+        Atom atom ->
+            atomIntToString atom
+
+
+termMonthToString : Term Month -> String
+termMonthToString term =
+    case term of
+        Step atom value ->
+            atomMonthToString atom ++ "/" ++ String.fromInt value
+
+        EveryStep value ->
+            "*/" ++ String.fromInt value
+
+        Atom atom ->
+            atomMonthToString atom
+
+
+termWeekDayToString : Term WeekDay -> String
+termWeekDayToString term =
+    case term of
+        Step atom value ->
+            atomWeekDayToString atom ++ "/" ++ String.fromInt value
+
+        EveryStep value ->
+            "*/" ++ String.fromInt value
+
+        Atom atom ->
+            atomWeekDayToString atom
+
+
+atomIntToString : Atom Int -> String
+atomIntToString atom =
+    case atom of
+        Particle value ->
+            String.fromInt value
+
+        Range start end ->
+            String.fromInt start ++ "-" ++ String.fromInt end
+
+
+atomMonthToString : Atom Month -> String
+atomMonthToString atom =
+    case atom of
+        Particle value ->
+            monthToString value
+
+        Range start end ->
+            monthToString start ++ "-" ++ monthToString end
+
+
+atomWeekDayToString : Atom WeekDay -> String
+atomWeekDayToString atom =
+    case atom of
+        Particle value ->
+            weekdayToString value
+
+        Range start end ->
+            weekdayToString start ++ "-" ++ weekdayToString end
+
+
+monthToString : Month -> String
+monthToString month =
     case month of
-        Time.Jan ->
-            "01"
+        January ->
+            "1"
 
-        Time.Feb ->
-            "02"
+        February ->
+            "2"
 
-        Time.Mar ->
-            "03"
+        March ->
+            "3"
 
-        Time.Apr ->
-            "04"
+        April ->
+            "4"
 
-        Time.May ->
-            "05"
+        May ->
+            "5"
 
-        Time.Jun ->
-            "06"
+        June ->
+            "6"
 
-        Time.Jul ->
-            "07"
+        July ->
+            "7"
 
-        Time.Aug ->
-            "08"
+        August ->
+            "8"
 
-        Time.Sep ->
-            "09"
+        September ->
+            "9"
 
-        Time.Oct ->
+        October ->
             "10"
 
-        Time.Nov ->
+        November ->
             "11"
 
-        Time.Dec ->
+        December ->
             "12"
 
 
-toStrMonth : Month -> String
-toStrMonth month =
-    case month of
-        Time.Jan ->
-            "Jan"
+weekdayToString : Cron.WeekDay -> String
+weekdayToString weekDay =
+    case weekDay of
+        Sunday ->
+            "0"
 
-        Time.Feb ->
-            "Feb"
+        Monday ->
+            "1"
 
-        Time.Mar ->
-            "Mar"
+        Tuesday ->
+            "2"
 
-        Time.Apr ->
-            "Apr"
+        Wednesday ->
+            "3"
 
-        Time.May ->
-            "May"
+        Thursday ->
+            "4"
 
-        Time.Jun ->
-            "Jun"
+        Friday ->
+            "5"
 
-        Time.Jul ->
-            "Jul"
-
-        Time.Aug ->
-            "Aug"
-
-        Time.Sep ->
-            "Sep"
-
-        Time.Oct ->
-            "Oct"
-
-        Time.Nov ->
-            "Nov"
-
-        Time.Dec ->
-            "Dec"
-
-
-posixToDateStr : Time.Zone -> Time.Posix -> String
-posixToDateStr zone time =
-    String.fromInt (Time.toYear zone time)
-        ++ "-"
-        ++ toIntStrMonth (Time.toMonth zone time)
-        ++ "-"
-        ++ adjustDay (Time.toDay zone time)
-
-
-adjustDay : Int -> String
-adjustDay val =
-    if val < 10 then
-        "0" ++ String.fromInt val
-
-    else
-        String.fromInt val
-
-
-toStrPosix : Time.Zone -> Time.Posix -> String
-toStrPosix zone time =
-    String.fromInt (Time.toDay zone time) ++ ", " ++ toStrMonth (Time.toMonth zone time) ++ " " ++ String.fromInt (Time.toYear zone time)
-
-
-toPosix : Time.Zone -> Time.Posix -> String -> String -> String -> Time.Posix
-toPosix zone default yearStr monthStr dayStr =
-    let
-        year =
-            String.toInt yearStr
-
-        -- TODO additional check > 0 && < 13
-        month =
-            String.toInt monthStr
-
-        -- TODO additional check for day?
-        day =
-            String.toInt dayStr
-    in
-    case ( year, month, day ) of
-        ( Just y, Just m, Just d ) ->
-            Time.millisToPosix 0 |> addYears (y - 1970) |> addMonths (m - 1) zone |> addDays (d - 1)
-
-        _ ->
-            default
+        Saturday ->
+            "6"
