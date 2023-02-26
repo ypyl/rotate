@@ -3,7 +3,7 @@ module Main exposing (main)
 import Browser
 import Browser.Events exposing (onResize)
 import Colors exposing (black, blue, blueFocused, gray, grayColorbackground, grayFocused, white)
-import Config exposing (dayTitleSize, taskSize, weekDayWidth)
+import Config exposing (dayTitleSize, modalSecondColumnWidth, taskSize, weekDayWidth)
 import Cron exposing (Cron, fromString)
 import Date exposing (Date, Unit(..), add, format, fromIsoString, toIsoString, today)
 import Element exposing (Element, alignRight, alignTop, centerX, centerY, column, el, fill, focused, height, htmlAttribute, inFront, layout, none, padding, paddingXY, paragraph, px, rgb255, row, spacing, text, textColumn, width)
@@ -70,7 +70,6 @@ type alias TaskValue =
     , createdDate : Date
     , editDate : Date
     , date : DateModel
-    , endDate : DateModel
     , status : TaskStatus
     , taskType : TaskType
     , error : List String
@@ -79,8 +78,16 @@ type alias TaskValue =
 
 type TaskType
     = Single
-    | CronType Cron String
-    | Slide
+    | CronType CronTaskValue
+    | Slide DateModel
+
+
+type alias CronTaskValue =
+    { cron : Cron
+    , cronEditValue : String
+    , endDate : DateModel
+    , cases : List PassedCases
+    }
 
 
 type TaskStatus
@@ -88,6 +95,12 @@ type TaskStatus
     | Active
     | Cancel
     | Fail
+
+
+type alias PassedCases =
+    { date : Date
+    , status : TaskStatus
+    }
 
 
 init : ( Int, Int ) -> ( Model, Cmd Msg )
@@ -98,20 +111,27 @@ init ( windowWidth, windowHeight ) =
       , startDate = initialStartDate
       , today = initialDateValue
       , tasks =
-            [ { value = "first", date = initialStartDate, endDate = initialStartDate, createdDate = initialDateValue, editDate = initialDateValue, status = Active, taskType = Single, error = [] }
-            , { value = "second", date = initialStartDate, endDate = initialStartDate, createdDate = initialDateValue, editDate = initialDateValue, status = Active, taskType = Slide, error = [] }
-            , { value = "third", date = initialStartDate, endDate = initialStartDate, createdDate = initialDateValue, editDate = initialDateValue, status = Done, taskType = Single, error = [] }
+            [ { value = "single", date = initialStartDate, createdDate = initialDateValue, editDate = initialDateValue, status = Active, taskType = Single, error = [] }
+            , { value = "slide", date = initialStartDate, createdDate = initialDateValue, editDate = initialDateValue, status = Active, taskType = Slide initialStartDate, error = [] }
+            , { value = "cron", date = initialStartDate, createdDate = initialDateValue, editDate = initialDateValue, status = Active, taskType = CronType initialCronTaskValue, error = [] }
             ]
       , editTask = Nothing
       }
     , Task.perform GetToday today
     )
 
+initialCronTaskValue =
+    { cron = defaultCron, cronEditValue = cronToString defaultCron, endDate = initDateModel initialDateValue, cases = [] }
+
 
 initialStartDate : { date : Date, dateText : String }
 initialStartDate =
-    { date = initialDateValue
-    , dateText = toIsoString initialDateValue
+    initDateModel initialDateValue
+
+initDateModel : Date -> { date : Date, dateText : String }
+initDateModel initDate =
+    { date = initDate
+    , dateText = toIsoString initDate
     }
 
 
@@ -211,7 +231,7 @@ update msg model =
                 Just (EditTask originalTask t) ->
                     let
                         updatedTask =
-                            { t | taskType = radioTypeToTaskType radioType }
+                            { t | taskType = radioTypeToTaskType t.date.date radioType }
                     in
                     ( { model | editTask = Just (EditTask originalTask updatedTask) }, Cmd.none )
 
@@ -240,11 +260,14 @@ update msg model =
 
                         updatedTask =
                             case ( fromString newValue, t.taskType ) of
-                                ( Ok newCron, _ ) ->
-                                    { t | taskType = CronType newCron (cronToString newCron), error = removeError t.error }
+                                ( Ok newCron, CronType cronTaskValue ) ->
+                                    { t | taskType = CronType { cronTaskValue | cron = newCron, cronEditValue = cronToString newCron }, error = removeError t.error }
 
-                                ( Err _, CronType currentValue _ ) ->
-                                    { t | error = addError t.error, taskType = CronType currentValue cronValue }
+                                ( Ok _, _ ) ->
+                                    t
+
+                                ( Err _, CronType cronTaskValue ) ->
+                                    { t | error = addError t.error, taskType = CronType { cronTaskValue | cronEditValue = cronValue } }
 
                                 ( Err _, _ ) ->
                                     { t | error = addError t.error }
@@ -259,7 +282,13 @@ update msg model =
                 ( Just (EditTask originalTask t), Ok newParsedDate ) ->
                     let
                         updatedTask =
-                            { t | date = updatedDateModel t.date, error = startDateAfterEndDate newParsedDate t.endDate.date t.error }
+                            case t.taskType of
+                                CronType cronValue ->
+                                    { t | date = updatedDateModel t.date, error = isThereStartDateAfterEndDate newParsedDate cronValue.endDate.date t.error }
+                                Slide endDate ->
+                                    { t | date = updatedDateModel t.date, error = isThereStartDateAfterEndDate newParsedDate endDate.date t.error }
+                                Single ->
+                                    { t | date = updatedDateModel t.date }
 
                         updatedDateModel modelToUpdate =
                             { modelToUpdate
@@ -277,19 +306,42 @@ update msg model =
         EditTaskEndDate newDate ->
             case ( model.editTask, fromIsoString newDate ) of
                 ( Just (EditTask originalTask t), Ok newParsedDate ) ->
-                    let
-                        updatedTask =
-                            { t | endDate = updatedDateModel t.endDate, error = startDateAfterEndDate t.date.date newParsedDate t.error }
+                    case t.taskType of
+                        CronType cronValue ->
+                            let
+                                updatedCronValue =
+                                    { cronValue | endDate = updatedDateModel cronValue.endDate }
 
-                        updatedDateModel modelToUpdate =
-                            { modelToUpdate
-                                | date = newParsedDate
-                                , dateText = newDate
-                            }
-                    in
-                    ( { model | editTask = Just (EditTask originalTask updatedTask) }
-                    , Cmd.none
-                    )
+                                updatedTask =
+                                    { t | taskType = CronType updatedCronValue, error = isThereStartDateAfterEndDate t.date.date newParsedDate t.error }
+
+                                updatedDateModel modelToUpdate =
+                                    { modelToUpdate
+                                        | date = newParsedDate
+                                        , dateText = newDate
+                                    }
+                            in
+                            ( { model | editTask = Just (EditTask originalTask updatedTask) }
+                            , Cmd.none
+                            )
+
+                        Slide endDate ->
+                            let
+                                updatedTask =
+                                    { t | taskType = Slide (updatedDateModel endDate), error = isThereStartDateAfterEndDate t.date.date newParsedDate t.error }
+
+                                updatedDateModel modelToUpdate =
+                                    { modelToUpdate
+                                        | date = newParsedDate
+                                        , dateText = newDate
+                                    }
+                            in
+                            ( { model | editTask = Just (EditTask originalTask updatedTask) }
+                            , Cmd.none
+                            )
+
+                        _ ->
+                            ( model, Cmd.none )
 
                 _ ->
                     ( model, Cmd.none )
@@ -298,8 +350,8 @@ update msg model =
             ( model, Cmd.none )
 
 
-startDateAfterEndDate : Date -> Date -> List String -> List String
-startDateAfterEndDate start end errors =
+isThereStartDateAfterEndDate : Date -> Date -> List String -> List String
+isThereStartDateAfterEndDate start end errors =
     let
         startDateAfter =
             "Start date after end date"
@@ -338,10 +390,6 @@ replaceTask toReplace newTask list =
 subscriptions : Model -> Sub Msg
 subscriptions _ =
     onResize (\w h -> SetWindowWidthHeight w h)
-
-
-
--- UI ELEMENTS
 
 
 dayTitle : String -> Element msg
@@ -385,10 +433,10 @@ emptyTaskValue date =
     let
         dateModel =
             { date = date
-            , dateText = ""
+            , dateText = toIsoString date
             }
     in
-    { value = "", status = Active, date = dateModel, endDate = dateModel, createdDate = date, editDate = date, taskType = Single, error = [] }
+    { value = "", status = Active, date = dateModel, createdDate = date, editDate = date, taskType = Single, error = [] }
 
 
 weekDay : Model -> Int -> Element Msg
@@ -469,11 +517,6 @@ numberOfWeekDayToShow viewWidth =
     viewWidth // weekDayWidth - 1
 
 
-modalSecondColumnWidth : Element.Length
-modalSecondColumnWidth =
-    px 170
-
-
 dayInput : DateModel -> (String -> Msg) -> Element Msg
 dayInput model changeEvent =
     row [ alignTop ]
@@ -518,12 +561,12 @@ editTaskView taskValue =
         [ row twoRowAttr [ inputValueView taskValue.value, inputDateView taskValue.date ]
         , row twoRowAttr [ inputTaskView taskValue.taskType, el [ alignRight ] (endDateView taskValue) ]
         , case taskValue.taskType of
-            CronType cronValue editValue ->
+            CronType cronTaskValue ->
                 if List.isEmpty taskValue.error then
-                    row twoRowAttr [ inputCronView editValue, cronView (toString cronValue) ]
+                    row twoRowAttr [ inputCronView cronTaskValue.cronEditValue, cronView (toString cronTaskValue.cron) ]
 
                 else
-                    row twoRowAttr [ inputCronView editValue, errorView taskValue.error ]
+                    row twoRowAttr [ inputCronView cronTaskValue.cronEditValue, errorView taskValue.error ]
 
             _ ->
                 if List.isEmpty taskValue.error then
@@ -541,11 +584,11 @@ endDateView taskValue =
         Single ->
             none
 
-        CronType _ _ ->
-            inputEndView taskValue.endDate
+        CronType cronTaskValue ->
+            inputEndView cronTaskValue.endDate
 
-        Slide ->
-            inputEndView taskValue.endDate
+        Slide endDate ->
+            inputEndView endDate
 
 
 inputEndView : DateModel -> Element Msg
@@ -605,24 +648,24 @@ taskTypeToRadioType taskType =
         Single ->
             SingleRadio
 
-        CronType _ _ ->
+        CronType _ ->
             CronRadio
 
-        Slide ->
+        Slide _ ->
             SlideRadio
 
 
-radioTypeToTaskType : RadioType -> TaskType
-radioTypeToTaskType radioType =
+radioTypeToTaskType : Date -> RadioType -> TaskType
+radioTypeToTaskType defaultEndDate radioType =
     case radioType of
         SingleRadio ->
             Single
 
         CronRadio ->
-            CronType defaultCron (cronToString defaultCron)
+            CronType { cron = defaultCron, cronEditValue = cronToString defaultCron, endDate = initDateModel defaultEndDate, cases = [] }
 
         SlideRadio ->
-            Slide
+            Slide (initDateModel defaultEndDate)
 
 
 inputTaskView : TaskType -> Element Msg
@@ -667,8 +710,7 @@ saveButton disabled =
             , padding 10
             , Border.rounded 5
             , Font.color white
-            , focused
-                [ Background.color blueFocused ]
+            , focused []
             ]
             { onPress = Just NoOp
             , label = text "Save"
