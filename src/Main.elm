@@ -4,25 +4,26 @@ import Browser
 import Browser.Events exposing (onResize)
 import Colors exposing (black, blue, blueFocused, gray, grayColorbackground, grayFocused, white)
 import Config exposing (dayTitleSize, taskSize, weekDayWidth)
-import Cron exposing (Cron)
-import Date exposing (Date, Unit(..), add, format, today)
-import DatePicker exposing (ChangeEvent(..))
-import Element exposing (Element, alignRight, alignTop, centerX, centerY, column, el, fill, focused, height, inFront, layout, padding, paddingXY, px, rgb255, row, spacing, text, width)
+import Cron exposing (Cron, fromString)
+import Date exposing (Date, Unit(..), add, format, fromIsoString, today)
+import Element exposing (Element, alignRight, alignTop, centerX, centerY, column, el, fill, focused, height, htmlAttribute, inFront, layout, none, padding, paddingXY, paragraph, px, rgb255, row, spacing, text, width)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Events exposing (onClick, onDoubleClick)
 import Element.Font as Font
 import Element.Input as Input exposing (button, labelHidden)
 import Html exposing (Html)
-import Html.Attributes exposing (style)
+import Html.Attributes exposing (class, style, type_)
+import Humanizer exposing (toString)
+import Mappers exposing (cronToString)
+import Parser exposing (deadEndsToString)
 import Task
 import Time exposing (Month(..))
 import TypedSvg exposing (path, svg)
 import TypedSvg.Attributes exposing (d, stroke, strokeLinecap, strokeLinejoin, strokeWidth, viewBox)
 import TypedSvg.Types exposing (Length(..), Paint(..), StrokeLinecap(..), StrokeLinejoin(..))
-import Element exposing (none)
-import Humanizer exposing (toString)
-import Mappers exposing (cronToString)
+import Date exposing (toIsoString)
+import Element exposing (shrink)
 
 
 main : Program ( Int, Int ) Model Msg
@@ -63,7 +64,6 @@ type alias Model =
 type alias DateModel =
     { date : Date
     , dateText : String
-    , pickerModel : DatePicker.Model
     }
 
 
@@ -75,15 +75,16 @@ type alias TaskValue =
     { value : String
     , createdDate : Date
     , editDate : Date
-    , date : Date
+    , date : DateModel
     , status : TaskStatus
     , taskType : TaskType
+    , error : Maybe String
     }
 
 
 type TaskType
     = Single
-    | CronType Cron
+    | CronType Cron String
     | Slide
 
 
@@ -102,9 +103,9 @@ init ( windowWidth, windowHeight ) =
       , startDate = initialStartDate
       , today = initialDateValue
       , tasks =
-            [ { value = "first", date = initialDateValue, createdDate = initialDateValue, editDate = initialDateValue, status = Active, taskType = Single }
-            , { value = "second", date = initialDateValue, createdDate = initialDateValue, editDate = initialDateValue, status = Active, taskType = Slide }
-            , { value = "third", date = initialDateValue, createdDate = initialDateValue, editDate = initialDateValue, status = Done, taskType = Single }
+            [ { value = "first", date = initialStartDate, createdDate = initialDateValue, editDate = initialDateValue, status = Active, taskType = Single, error = Nothing }
+            , { value = "second", date = initialStartDate, createdDate = initialDateValue, editDate = initialDateValue, status = Active, taskType = Slide, error = Nothing }
+            , { value = "third", date = initialStartDate, createdDate = initialDateValue, editDate = initialDateValue, status = Done, taskType = Single, error = Nothing }
             ]
       , editTask = Nothing
       }
@@ -112,31 +113,31 @@ init ( windowWidth, windowHeight ) =
     )
 
 
-initialStartDate : { date : Date, dateText : String, pickerModel : DatePicker.Model }
+initialStartDate : { date : Date, dateText : String }
 initialStartDate =
     { date = initialDateValue
-    , dateText = ""
-    , pickerModel = DatePicker.init
+    , dateText = toIsoString initialDateValue
     }
 
 
 initialDateValue : Date
 initialDateValue =
-    Date.fromCalendarDate 2023 Feb 26
+    Date.fromCalendarDate 2023 Feb 28
 
 
 type Msg
     = Name String
     | SetWindowWidthHeight Int Int
     | GetToday Date
-    | ChangeStartDate ChangeEvent
+    | ChangeStartDate String
+    | EditTaskDate String
     | SaveTask
     | CancelEdit
     | EditValue String
     | EditTaskMsg TaskValue
-    | EditTaskType TaskType
+    | EditTaskType RadioType
     | EditCronValue String
-    | OpenStartDateDialog
+    | NoOp
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -157,61 +158,31 @@ update msg model =
                     { startDateModel
                         | date = date
                         , dateText = Date.toIsoString date
-                        , pickerModel =
-                            startDateModel.pickerModel
-                                |> DatePicker.setToday date
                     }
             in
             ( { model | today = date, startDate = updatedStartDate }
             , Cmd.none
             )
 
-        ChangeStartDate changeEvent ->
-            let
-                startDateModel =
-                    model.startDate
-            in
-            case changeEvent of
-                DateChanged date ->
+        ChangeStartDate newDate ->
+            case fromIsoString newDate of
+                Ok newDateParser ->
                     let
+                        startDateModel =
+                            model.startDate
+
                         updatedStartDate =
                             { startDateModel
-                                | date = date
-                                , dateText = Date.toIsoString date
+                                | date = newDateParser
+                                , dateText = newDate
                             }
                     in
                     ( { model | startDate = updatedStartDate }
                     , Cmd.none
                     )
 
-                TextChanged text ->
-                    let
-                        updatedStartDate =
-                            { startDateModel
-                                | date =
-                                    -- parse the text in any way you like
-                                    Date.fromIsoString text
-                                        |> Result.toMaybe
-                                        |> Maybe.withDefault model.today
-                                , dateText = text
-                            }
-                    in
-                    ( { model | startDate = updatedStartDate }
-                    , Cmd.none
-                    )
-
-                PickerChanged subMsg ->
-                    let
-                        updatedStartDate =
-                            { startDateModel
-                                | pickerModel =
-                                    startDateModel.pickerModel
-                                        |> DatePicker.update subMsg
-                            }
-                    in
-                    ( { model | startDate = updatedStartDate }
-                    , Cmd.none
-                    )
+                _ ->
+                    ( model, Cmd.none )
 
         SaveTask ->
             case model.editTask of
@@ -239,12 +210,12 @@ update msg model =
         EditTaskMsg task ->
             ( { model | editTask = Just (EditTask task task) }, Cmd.none )
 
-        EditTaskType taskType ->
+        EditTaskType radioType ->
             case model.editTask of
                 Just (EditTask originalTask t) ->
                     let
                         updatedTask =
-                            { t | taskType = taskType }
+                            { t | taskType = radioTypeToTaskType radioType }
                     in
                     ( { model | editTask = Just (EditTask originalTask updatedTask) }, Cmd.none )
 
@@ -252,35 +223,62 @@ update msg model =
                     ( model, Cmd.none )
 
         EditCronValue cronValue ->
+            case model.editTask of
+                Just (EditTask originalTask t) ->
+                    let
+                        newValue =
+                            "* * " ++ cronValue
+
+                        updatedTask =
+                            case ( fromString newValue, t.taskType ) of
+                                ( Ok newCron, _ ) ->
+                                    { t | taskType = CronType newCron (cronToString newCron), error = Nothing }
+
+                                ( Err errorValue, CronType currentValue _ ) ->
+                                    { t | error = Just (deadEndsToString errorValue), taskType = CronType currentValue cronValue }
+
+                                ( Err errorValue, _ ) ->
+                                    { t | error = Just (deadEndsToString errorValue) }
+                    in
+                    ( { model | editTask = Just (EditTask originalTask updatedTask) }, Cmd.none )
+
+                Nothing ->
+                    ( model, Cmd.none )
+
+        EditTaskDate newDate ->
+            case (model.editTask, fromIsoString newDate) of
+                (Just (EditTask originalTask t), Ok newParsedDate) ->
+                    let
+                        updatedTask = { t | date = updatedDateModel t.date }
+                        updatedDateModel modelToUpdate =
+                            { modelToUpdate
+                                | date = newParsedDate
+                                , dateText = newDate
+                            }
+                    in
+                    ( { model | editTask = Just (EditTask originalTask updatedTask) }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        NoOp ->
             ( model, Cmd.none )
 
-        OpenStartDateDialog ->
-            let
-                startDateModel =
-                    model.startDate
 
-                updatedStartDate =
-                    { startDateModel
-                        | pickerModel =
-                            startDateModel.pickerModel
-                                |> DatePicker.open
-                    }
-            in
-            ( { model | startDate = updatedStartDate }
-            , Cmd.none
-            )
-
-
-replaceTask: TaskValue -> TaskValue -> List TaskValue -> List TaskValue
+replaceTask : TaskValue -> TaskValue -> List TaskValue -> List TaskValue
 replaceTask toReplace newTask list =
     let
         check taskValue result =
             if taskValue == toReplace then
                 newTask :: result
+
             else
                 taskValue :: result
     in
     List.foldl check [] list |> List.reverse
+
 
 subscriptions : Model -> Sub Msg
 subscriptions _ =
@@ -293,7 +291,7 @@ subscriptions _ =
 
 dayTitle : String -> Element msg
 dayTitle value =
-    el [ Font.bold, height (px dayTitleSize), centerX ] (text value)
+    el [ paddingXY 0 5, height (px dayTitleSize), centerX ] (text value)
 
 
 taskValueView : TaskValue -> Element Msg
@@ -329,7 +327,13 @@ taskValueView task =
 
 emptyTaskValue : Date -> TaskValue
 emptyTaskValue date =
-    { value = "", status = Active, date = date, createdDate = date, editDate = date, taskType = Single }
+    let
+        dateModel =
+            { date = date
+            , dateText = ""
+            }
+    in
+    { value = "", status = Active, date = dateModel, createdDate = date, editDate = date, taskType = Single, error = Nothing }
 
 
 weekDay : Model -> Int -> Element Msg
@@ -356,10 +360,7 @@ weekDay model dayDelta =
 
         title =
             if dayDelta == 0 then
-                row [ width fill, spacing 5 ]
-                    [ dayInput model.startDate
-                    , dayTitle (format "E, d MMM y" weekDayDate)
-                    ]
+                dayInput model.startDate ChangeStartDate
 
             else
                 dayTitle (format "E, d MMM y" weekDayDate)
@@ -387,7 +388,7 @@ filteredTaskPerDay : Date -> List TaskValue -> List TaskValue
 filteredTaskPerDay date tasks =
     let
         filterFunc task =
-            task.date == date
+            task.date.date == date
     in
     List.filter filterFunc tasks
 
@@ -413,61 +414,16 @@ numberOfWeekDayToShow viewWidth =
     viewWidth // weekDayWidth - 1
 
 
-dayInput : DateModel -> Element Msg
-dayInput model =
+dayInput : DateModel -> (String -> Msg) -> Element Msg
+dayInput model changeEvent =
     row [ alignTop ]
-        [ calendarIcon
-        , DatePicker.input [ width (px 0), height (px 0), alignTop, Border.width 0, focused [] ]
-            { onChange = ChangeStartDate
-            , selected = Just model.date
+        [ Input.text [ type_ "date" |> htmlAttribute, class "date-input" |> htmlAttribute, Border.width 0, focused [], width (px 170) ]
+            { onChange = changeEvent
             , text = model.dateText
             , label = Input.labelHidden "dayInput"
             , placeholder = Nothing
-            , settings = settings
-            , model = model.pickerModel
             }
         ]
-
-
-calendarIcon : Element Msg
-calendarIcon =
-    el [ height (px 24), width (px 24), alignTop, onClick OpenStartDateDialog ]
-        (svg
-            [ style "vertical-align" "middle"
-            , TypedSvg.Attributes.width <| Px 24
-            , TypedSvg.Attributes.height <| Px 24
-            , viewBox 0 0 24 24
-            , strokeWidth <| Px 1
-            , TypedSvg.Attributes.fill PaintNone
-            , strokeLinecap StrokeLinecapRound
-            , strokeLinejoin StrokeLinejoinRound
-            ]
-            [ path [ stroke PaintNone, d "M0 0h24v24H0z", TypedSvg.Attributes.fill PaintNone ] []
-            , path [ d "M4 5m0 2a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2z" ] []
-            , path [ d "M16 3l0 4" ] []
-            , path [ d "M8 3l0 4" ] []
-            , path [ d "M4 11l16 0" ] []
-            , path [ d "M8 15h2v2h-2z" ] []
-            ]
-            |> Element.html
-        )
-
-
-settings : DatePicker.Settings
-settings =
-    let
-        default =
-            DatePicker.defaultSettings
-    in
-    { default
-        | pickerAttributes =
-            [ Background.color white
-            , padding 10
-            , Border.color black
-            , Border.width 1
-            , Border.rounded 5
-            ]
-    }
 
 
 grayBackground : TaskValue -> Element Msg
@@ -495,18 +451,54 @@ modalView taskValue =
 editTaskView : TaskValue -> Element Msg
 editTaskView taskValue =
     column [ width fill, padding 10, spacing 10 ]
-        [ inputValueView taskValue.value
+        [ row [ width fill ] [ inputValueView taskValue.value , inputDateView taskValue.date ]
         , inputTaskView taskValue.taskType
         , case taskValue.taskType of
-            CronType cronValue -> inputCronView (cronToString cronValue)
-            _ -> none
-        , modalFooter
+            CronType _ editValue ->
+                inputCronView editValue
+
+            _ ->
+                none
+        , case ( taskValue.error, taskValue.taskType ) of
+            ( Just _, CronType _ _ ) ->
+                cronView "Incorrect cron string"
+
+            ( Nothing, CronType cronValue _ ) ->
+                cronView (toString cronValue)
+
+            _ ->
+                none
+        , case ( taskValue.error, taskValue.taskType ) of
+            ( Just _, _ ) ->
+                modalFooter True
+
+            _ ->
+                modalFooter False
         ]
+
+
+cronView : String -> Element msg
+cronView strCron =
+    let
+        result =
+            case String.split "," strCron of
+                _ :: _ :: rest ->
+                    String.join "," rest
+
+                _ ->
+                    strCron
+    in
+    paragraph [ Font.size 14 ] [ text result ]
+
+
+inputDateView : DateModel -> Element Msg
+inputDateView dateModel =
+    dayInput dateModel EditTaskDate
 
 
 inputValueView : String -> Element Msg
 inputValueView value =
-    Input.text []
+    Input.text [ focused [] ]
         { onChange = EditValue
         , text = value
         , placeholder = Nothing
@@ -519,16 +511,52 @@ defaultCron =
     Cron.Cron Cron.Every Cron.Every Cron.Every Cron.Every Cron.Every
 
 
+type RadioType
+    = SingleRadio
+    | CronRadio
+    | SlideRadio
+
+
+taskTypeToRadioType : TaskType -> RadioType
+taskTypeToRadioType taskType =
+    case taskType of
+        Single ->
+            SingleRadio
+
+        CronType _ _ ->
+            CronRadio
+
+        Slide ->
+            SlideRadio
+
+
+radioTypeToTaskType : RadioType -> TaskType
+radioTypeToTaskType radioType =
+    case radioType of
+        SingleRadio ->
+            Single
+
+        CronRadio ->
+            CronType defaultCron (cronToString defaultCron)
+
+        SlideRadio ->
+            Slide
+
+
 inputTaskView : TaskType -> Element Msg
 inputTaskView taskType =
+    let
+        selected =
+            taskTypeToRadioType taskType
+    in
     Input.radioRow [ spacing 10 ]
         { onChange = EditTaskType
         , options =
-            [ Input.option Single (text "Single")
-            , Input.option (CronType defaultCron) (text "Cron")
-            , Input.option Slide (text "Slide")
+            [ Input.option SingleRadio (text "Single")
+            , Input.option CronRadio (text "Cron")
+            , Input.option SlideRadio (text "Slide")
             ]
-        , selected = Just taskType
+        , selected = Just selected
         , label = Input.labelHidden "inputTaskView"
         }
 
@@ -543,25 +571,40 @@ inputCronView value =
         }
 
 
-modalFooter : Element Msg
-modalFooter =
-    row [ width fill, spacing 10 ] [ cancelButton, saveButton ]
+modalFooter : Bool -> Element Msg
+modalFooter incorrectState =
+    row [ width fill, spacing 10 ] [ cancelButton, saveButton incorrectState ]
 
 
-saveButton : Element Msg
-saveButton =
-    button
-        [ Background.color blue
-        , alignRight
-        , padding 10
-        , Border.rounded 5
-        , Font.color white
-        , focused
-            [ Background.color blueFocused ]
-        ]
-        { onPress = Just SaveTask
-        , label = text "Save"
-        }
+saveButton : Bool -> Element Msg
+saveButton disabled =
+    if disabled then
+        button
+            [ Background.color gray
+            , alignRight
+            , padding 10
+            , Border.rounded 5
+            , Font.color white
+            , focused
+                [ Background.color blueFocused ]
+            ]
+            { onPress = Just NoOp
+            , label = text "Save"
+            }
+
+    else
+        button
+            [ Background.color blue
+            , alignRight
+            , padding 10
+            , Border.rounded 5
+            , Font.color white
+            , focused
+                [ Background.color blueFocused ]
+            ]
+            { onPress = Just SaveTask
+            , label = text "Save"
+            }
 
 
 cancelButton : Element Msg
