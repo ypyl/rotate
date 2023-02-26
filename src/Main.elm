@@ -5,25 +5,19 @@ import Browser.Events exposing (onResize)
 import Colors exposing (black, blue, blueFocused, gray, grayColorbackground, grayFocused, white)
 import Config exposing (dayTitleSize, taskSize, weekDayWidth)
 import Cron exposing (Cron, fromString)
-import Date exposing (Date, Unit(..), add, format, fromIsoString, today)
-import Element exposing (Element, alignRight, alignTop, centerX, centerY, column, el, fill, focused, height, htmlAttribute, inFront, layout, none, padding, paddingXY, paragraph, px, rgb255, row, spacing, text, width)
+import Date exposing (Date, Unit(..), add, format, fromIsoString, toIsoString, today)
+import Element exposing (Element, alignRight, alignTop, centerX, centerY, column, el, fill, focused, height, htmlAttribute, inFront, layout, none, padding, paddingXY, paragraph, px, rgb255, row, spacing, text, textColumn, width)
 import Element.Background as Background
 import Element.Border as Border
-import Element.Events exposing (onClick, onDoubleClick)
+import Element.Events exposing (onDoubleClick)
 import Element.Font as Font
 import Element.Input as Input exposing (button, labelHidden)
 import Html exposing (Html)
-import Html.Attributes exposing (class, style, type_)
+import Html.Attributes exposing (class, type_)
 import Humanizer exposing (toString)
 import Mappers exposing (cronToString)
-import Parser exposing (deadEndsToString)
 import Task
 import Time exposing (Month(..))
-import TypedSvg exposing (path, svg)
-import TypedSvg.Attributes exposing (d, stroke, strokeLinecap, strokeLinejoin, strokeWidth, viewBox)
-import TypedSvg.Types exposing (Length(..), Paint(..), StrokeLinecap(..), StrokeLinejoin(..))
-import Date exposing (toIsoString)
-import Element exposing (shrink)
 
 
 main : Program ( Int, Int ) Model Msg
@@ -76,9 +70,10 @@ type alias TaskValue =
     , createdDate : Date
     , editDate : Date
     , date : DateModel
+    , endDate : DateModel
     , status : TaskStatus
     , taskType : TaskType
-    , error : Maybe String
+    , error : List String
     }
 
 
@@ -103,9 +98,9 @@ init ( windowWidth, windowHeight ) =
       , startDate = initialStartDate
       , today = initialDateValue
       , tasks =
-            [ { value = "first", date = initialStartDate, createdDate = initialDateValue, editDate = initialDateValue, status = Active, taskType = Single, error = Nothing }
-            , { value = "second", date = initialStartDate, createdDate = initialDateValue, editDate = initialDateValue, status = Active, taskType = Slide, error = Nothing }
-            , { value = "third", date = initialStartDate, createdDate = initialDateValue, editDate = initialDateValue, status = Done, taskType = Single, error = Nothing }
+            [ { value = "first", date = initialStartDate, endDate = initialStartDate, createdDate = initialDateValue, editDate = initialDateValue, status = Active, taskType = Single, error = [] }
+            , { value = "second", date = initialStartDate, endDate = initialStartDate, createdDate = initialDateValue, editDate = initialDateValue, status = Active, taskType = Slide, error = [] }
+            , { value = "third", date = initialStartDate, endDate = initialStartDate, createdDate = initialDateValue, editDate = initialDateValue, status = Done, taskType = Single, error = [] }
             ]
       , editTask = Nothing
       }
@@ -137,6 +132,7 @@ type Msg
     | EditTaskMsg TaskValue
     | EditTaskType RadioType
     | EditCronValue String
+    | EditTaskEndDate String
     | NoOp
 
 
@@ -226,19 +222,32 @@ update msg model =
             case model.editTask of
                 Just (EditTask originalTask t) ->
                     let
+                        incorrectCronError =
+                            "Incorrect cron value"
+
+                        removeError errors =
+                            List.filter (\i -> i /= incorrectCronError) errors
+
+                        addError errors =
+                            if List.member incorrectCronError errors then
+                                errors
+
+                            else
+                                incorrectCronError :: errors
+
                         newValue =
                             "* * " ++ cronValue
 
                         updatedTask =
                             case ( fromString newValue, t.taskType ) of
                                 ( Ok newCron, _ ) ->
-                                    { t | taskType = CronType newCron (cronToString newCron), error = Nothing }
+                                    { t | taskType = CronType newCron (cronToString newCron), error = removeError t.error }
 
-                                ( Err errorValue, CronType currentValue _ ) ->
-                                    { t | error = Just (deadEndsToString errorValue), taskType = CronType currentValue cronValue }
+                                ( Err _, CronType currentValue _ ) ->
+                                    { t | error = addError t.error, taskType = CronType currentValue cronValue }
 
-                                ( Err errorValue, _ ) ->
-                                    { t | error = Just (deadEndsToString errorValue) }
+                                ( Err _, _ ) ->
+                                    { t | error = addError t.error }
                     in
                     ( { model | editTask = Just (EditTask originalTask updatedTask) }, Cmd.none )
 
@@ -246,10 +255,32 @@ update msg model =
                     ( model, Cmd.none )
 
         EditTaskDate newDate ->
-            case (model.editTask, fromIsoString newDate) of
-                (Just (EditTask originalTask t), Ok newParsedDate) ->
+            case ( model.editTask, fromIsoString newDate ) of
+                ( Just (EditTask originalTask t), Ok newParsedDate ) ->
                     let
-                        updatedTask = { t | date = updatedDateModel t.date }
+                        updatedTask =
+                            { t | date = updatedDateModel t.date, error = startDateAfterEndDate newParsedDate t.endDate.date t.error }
+
+                        updatedDateModel modelToUpdate =
+                            { modelToUpdate
+                                | date = newParsedDate
+                                , dateText = newDate
+                            }
+                    in
+                    ( { model | editTask = Just (EditTask originalTask updatedTask) }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        EditTaskEndDate newDate ->
+            case ( model.editTask, fromIsoString newDate ) of
+                ( Just (EditTask originalTask t), Ok newParsedDate ) ->
+                    let
+                        updatedTask =
+                            { t | endDate = updatedDateModel t.endDate, error = startDateAfterEndDate t.date.date newParsedDate t.error }
+
                         updatedDateModel modelToUpdate =
                             { modelToUpdate
                                 | date = newParsedDate
@@ -265,6 +296,30 @@ update msg model =
 
         NoOp ->
             ( model, Cmd.none )
+
+
+startDateAfterEndDate : Date -> Date -> List String -> List String
+startDateAfterEndDate start end errors =
+    let
+        startDateAfter =
+            "Start date after end date"
+
+        addError error =
+            if List.member startDateAfter error then
+                error
+
+            else
+                startDateAfter :: error
+
+        removeError error =
+            List.filter (\i -> i /= startDateAfter) error
+    in
+    case Date.compare start end of
+        GT ->
+            addError errors
+
+        _ ->
+            removeError errors
 
 
 replaceTask : TaskValue -> TaskValue -> List TaskValue -> List TaskValue
@@ -333,7 +388,7 @@ emptyTaskValue date =
             , dateText = ""
             }
     in
-    { value = "", status = Active, date = dateModel, createdDate = date, editDate = date, taskType = Single, error = Nothing }
+    { value = "", status = Active, date = dateModel, endDate = dateModel, createdDate = date, editDate = date, taskType = Single, error = [] }
 
 
 weekDay : Model -> Int -> Element Msg
@@ -414,10 +469,15 @@ numberOfWeekDayToShow viewWidth =
     viewWidth // weekDayWidth - 1
 
 
+modalSecondColumnWidth : Element.Length
+modalSecondColumnWidth =
+    px 170
+
+
 dayInput : DateModel -> (String -> Msg) -> Element Msg
 dayInput model changeEvent =
     row [ alignTop ]
-        [ Input.text [ type_ "date" |> htmlAttribute, class "date-input" |> htmlAttribute, Border.width 0, focused [], width (px 170) ]
+        [ Input.text [ type_ "date" |> htmlAttribute, class "date-input" |> htmlAttribute, Border.width 0, focused [], width modalSecondColumnWidth ]
             { onChange = changeEvent
             , text = model.dateText
             , label = Input.labelHidden "dayInput"
@@ -450,31 +510,53 @@ modalView taskValue =
 
 editTaskView : TaskValue -> Element Msg
 editTaskView taskValue =
+    let
+        twoRowAttr =
+            [ spacing 5, width fill ]
+    in
     column [ width fill, padding 10, spacing 10 ]
-        [ row [ width fill ] [ inputValueView taskValue.value , inputDateView taskValue.date ]
-        , inputTaskView taskValue.taskType
+        [ row twoRowAttr [ inputValueView taskValue.value, inputDateView taskValue.date ]
+        , row twoRowAttr [ inputTaskView taskValue.taskType, el [ alignRight ] (endDateView taskValue) ]
         , case taskValue.taskType of
-            CronType _ editValue ->
-                inputCronView editValue
+            CronType cronValue editValue ->
+                if List.isEmpty taskValue.error then
+                    row twoRowAttr [ inputCronView editValue, cronView (toString cronValue) ]
+
+                else
+                    row twoRowAttr [ inputCronView editValue, errorView taskValue.error ]
 
             _ ->
-                none
-        , case ( taskValue.error, taskValue.taskType ) of
-            ( Just _, CronType _ _ ) ->
-                cronView "Incorrect cron string"
+                if List.isEmpty taskValue.error then
+                    none
 
-            ( Nothing, CronType cronValue _ ) ->
-                cronView (toString cronValue)
-
-            _ ->
-                none
-        , case ( taskValue.error, taskValue.taskType ) of
-            ( Just _, _ ) ->
-                modalFooter True
-
-            _ ->
-                modalFooter False
+                else
+                    row twoRowAttr [ none, errorView taskValue.error ]
+        , modalFooter (List.isEmpty taskValue.error |> not)
         ]
+
+
+endDateView : TaskValue -> Element Msg
+endDateView taskValue =
+    case taskValue.taskType of
+        Single ->
+            none
+
+        CronType _ _ ->
+            inputEndView taskValue.endDate
+
+        Slide ->
+            inputEndView taskValue.endDate
+
+
+inputEndView : DateModel -> Element Msg
+inputEndView dateModel =
+    dayInput dateModel EditTaskEndDate
+
+
+errorView : List String -> Element msg
+errorView errors =
+    column [ width modalSecondColumnWidth ]
+        (errors |> List.map text |> List.map (\i -> paragraph [ Font.size 14 ] [ i ]))
 
 
 cronView : String -> Element msg
@@ -486,9 +568,9 @@ cronView strCron =
                     String.join "," rest
 
                 _ ->
-                    strCron
+                    ""
     in
-    paragraph [ Font.size 14 ] [ text result ]
+    paragraph [ Font.size 14, width modalSecondColumnWidth ] [ text result ]
 
 
 inputDateView : DateModel -> Element Msg
@@ -563,7 +645,7 @@ inputTaskView taskType =
 
 inputCronView : String -> Element Msg
 inputCronView value =
-    Input.text []
+    Input.text [ focused [] ]
         { onChange = EditCronValue
         , text = value
         , placeholder = Nothing
