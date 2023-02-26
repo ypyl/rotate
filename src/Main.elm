@@ -384,7 +384,10 @@ replaceTask toReplace newTask list =
             else
                 taskValue :: result
     in
-    List.foldl check [] list |> List.reverse
+    if emptyTaskValue toReplace.date.date == toReplace then
+        newTask :: list
+    else
+        List.foldl check [] list |> List.reverse
 
 
 subscriptions : Model -> Sub Msg
