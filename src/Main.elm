@@ -4,9 +4,9 @@ import Browser
 import Browser.Events exposing (onResize)
 import Colors exposing (black, blue, blueFocused, gray, grayColorbackground, grayFocused, white)
 import Config exposing (dayTitleSize, modalSecondColumnWidth, taskSize, weekDayWidth)
-import Cron exposing (Cron, fromString)
-import Date exposing (Date, Unit(..), add, format, fromIsoString, toIsoString, today)
-import Element exposing (Element, alignRight, alignTop, centerX, centerY, column, el, fill, focused, height, htmlAttribute, inFront, layout, none, padding, paddingXY, paragraph, px, rgb255, row, spacing, text, textColumn, width)
+import Cron exposing (Cron, WeekDay(..), fromString)
+import Date exposing (Date, Unit(..), add, day, format, fromIsoString, isBetween, month, toIsoString, today, year)
+import Element exposing (Element, alignRight, alignTop, centerX, centerY, column, el, fill, focused, height, htmlAttribute, inFront, layout, none, padding, paddingXY, paragraph, px, rgb255, row, spacing, text, width)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Events exposing (onDoubleClick)
@@ -15,7 +15,7 @@ import Element.Input as Input exposing (button, labelHidden)
 import Html exposing (Html)
 import Html.Attributes exposing (class, type_)
 import Humanizer exposing (toString)
-import Mappers exposing (cronToString)
+import Mappers exposing (cronToString, isCronMatchDate)
 import Task
 import Time exposing (Month(..))
 
@@ -108,25 +108,33 @@ init ( windowWidth, windowHeight ) =
     ( { message = "hey"
       , windowWidth = windowWidth
       , windowHeight = windowHeight
-      , startDate = initialStartDate
+      , startDate = initialStartDate 0
       , today = initialDateValue
       , tasks =
-            [ { value = "single", date = initialStartDate, createdDate = initialDateValue, editDate = initialDateValue, status = Active, taskType = Single, error = [] }
-            , { value = "slide", date = initialStartDate, createdDate = initialDateValue, editDate = initialDateValue, status = Active, taskType = Slide initialStartDate, error = [] }
-            , { value = "cron", date = initialStartDate, createdDate = initialDateValue, editDate = initialDateValue, status = Active, taskType = CronType initialCronTaskValue, error = [] }
+            [ { value = "single", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, status = Active, taskType = Single, error = [] }
+            , { value = "slide", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, status = Active, taskType = Slide (initialStartDate 10), error = [] }
+            , { value = "cron", date = initialStartDate -100, createdDate = initialDateValue, editDate = initialDateValue, status = Active, taskType = CronType initialCronTaskValue, error = [] }
             ]
       , editTask = Nothing
       }
     , Task.perform GetToday today
     )
 
+
+initialCronTaskValue : { cron : Cron, cronEditValue : String, endDate : { date : Date, dateText : String }, cases : List a }
 initialCronTaskValue =
-    { cron = defaultCron, cronEditValue = cronToString defaultCron, endDate = initDateModel initialDateValue, cases = [] }
+    { cron = testCron, cronEditValue = cronToString testCron, endDate = initialStartDate 100, cases = [] }
 
 
-initialStartDate : { date : Date, dateText : String }
-initialStartDate =
-    initDateModel initialDateValue
+testCron : Cron
+testCron =
+    Cron.Cron Cron.Every Cron.Every Cron.Every Cron.Every (Cron.Single (Cron.Atom (Cron.Range Monday Friday)))
+
+
+initialStartDate : Int -> { date : Date, dateText : String }
+initialStartDate delta =
+    initDateModel (add Days delta initialDateValue)
+
 
 initDateModel : Date -> { date : Date, dateText : String }
 initDateModel initDate =
@@ -137,7 +145,7 @@ initDateModel initDate =
 
 initialDateValue : Date
 initialDateValue =
-    Date.fromCalendarDate 2023 Feb 28
+    Date.fromCalendarDate 2023 Feb 25
 
 
 type Msg
@@ -285,8 +293,10 @@ update msg model =
                             case t.taskType of
                                 CronType cronValue ->
                                     { t | date = updatedDateModel t.date, error = isThereStartDateAfterEndDate newParsedDate cronValue.endDate.date t.error }
+
                                 Slide endDate ->
                                     { t | date = updatedDateModel t.date, error = isThereStartDateAfterEndDate newParsedDate endDate.date t.error }
+
                                 Single ->
                                     { t | date = updatedDateModel t.date }
 
@@ -386,6 +396,7 @@ replaceTask toReplace newTask list =
     in
     if emptyTaskValue toReplace.date.date == toReplace then
         newTask :: list
+
     else
         List.foldl check [] list |> List.reverse
 
@@ -445,11 +456,14 @@ emptyTaskValue date =
 weekDay : Model -> Int -> Element Msg
 weekDay model dayDelta =
     let
+        atLeastOneEmptyTaskPerDay =
+            1
+
         weekDayDate =
             add Days dayDelta model.startDate.date
 
         weekDayTasks =
-            filteredTaskPerDay weekDayDate model.tasks
+            filteredTaskPerDay model.today weekDayDate model.tasks
 
         emptyTasks count =
             List.repeat count (taskValueView (emptyTaskValue weekDayDate))
@@ -462,7 +476,7 @@ weekDay model dayDelta =
                 totalCountOfTasksToShow - List.length weekDayTasks
 
             else
-                0
+                atLeastOneEmptyTaskPerDay
 
         title =
             if dayDelta == 0 then
@@ -487,16 +501,28 @@ weekDay model dayDelta =
 
 
 
+-- TODO need to change the order of circles as numbers of tasks is bigger than number of days that we are showing
+-- so we need to go first via all tasks and then days
+-- after that there will be a dictionary that can be used in view function
 -- TODO use dict to find tasks for days (there will be a special case for different types)
 
 
-filteredTaskPerDay : Date -> List TaskValue -> List TaskValue
-filteredTaskPerDay date tasks =
-    let
-        filterFunc task =
-            task.date.date == date
-    in
-    List.filter filterFunc tasks
+filteredTaskPerDay : Date -> Date -> List TaskValue -> List TaskValue
+filteredTaskPerDay today date tasks =
+    List.filter (showTaskAtDate today date) tasks
+
+
+showTaskAtDate : Date -> Date -> TaskValue -> Bool
+showTaskAtDate today date taskValue =
+    case taskValue.taskType of
+        Single ->
+            taskValue.date.date == date
+
+        CronType cronValue ->
+            isBetween taskValue.date.date cronValue.endDate.date date && isCronMatchDate cronValue.cron date
+
+        Slide end ->
+            isBetween taskValue.date.date end.date date && isBetween taskValue.date.date today date
 
 
 numberOfTaskToShow : Int -> Int

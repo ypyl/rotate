@@ -1,6 +1,7 @@
-module Mappers exposing (cronToString)
+module Mappers exposing (cronToString, isCronMatchDate)
 
 import Cron exposing (Atom(..), Cron(..), Expr(..), Month(..), Term(..), WeekDay(..))
+import Date exposing (Date, day, month, monthToNumber, weekday, weekdayToNumber)
 
 
 cronToString : Cron -> String
@@ -179,3 +180,198 @@ weekdayToString weekDay =
 
         Saturday ->
             "6"
+
+
+
+-- TODO cron matches date
+
+
+isCronMatchDate : Cron -> Date -> Bool
+isCronMatchDate cron date =
+    let
+        dateWeekday =
+            weekday date |> weekdayToNumber
+
+        dateMonth =
+            month date |> monthToNumber
+
+        dateDay =
+            day date
+
+        (Cron _ _ cronDay cronMonth cronWeekDay) =
+            cron
+    in
+    isMatchExprInt cronDay dateDay && isMatchExprMonth cronMonth dateMonth && isMatchExprWeekDay cronWeekDay dateWeekday
+
+
+isMatchExprWeekDay : Expr WeekDay -> Int -> Bool
+isMatchExprWeekDay term value =
+    case term of
+        Single termValue ->
+            isMatchTermWeekDay value termValue
+
+        Multiple terms ->
+            List.all (isMatchTermWeekDay value) terms
+
+        Every ->
+            True
+
+
+isMatchTermWeekDay : Int -> Term WeekDay -> Bool
+isMatchTermWeekDay value term =
+    case term of
+        Step atom step ->
+            isMatchAtomWeekDay atom value && remainderBy step value == 0
+
+        EveryStep step ->
+            remainderBy step value == 0
+
+        Atom atom ->
+            isMatchAtomWeekDay atom value
+
+
+isMatchAtomWeekDay : Atom WeekDay -> Int -> Bool
+isMatchAtomWeekDay atom value =
+    case atom of
+        Particle i ->
+            weekdayToInt i == value
+
+        Range start end ->
+            weekdayToInt start <= value && value <= weekdayToInt end
+
+
+isMatchExprMonth : Expr Month -> Int -> Bool
+isMatchExprMonth term value =
+    case term of
+        Single termValue ->
+            isMatchTermMonth value termValue
+
+        Multiple terms ->
+            List.all (isMatchTermMonth value) terms
+
+        Every ->
+            True
+
+
+isMatchTermMonth : Int -> Term Month -> Bool
+isMatchTermMonth value term =
+    case term of
+        Step atom step ->
+            isMatchAtomMonth atom value && remainderBy step value == 0
+
+        EveryStep step ->
+            remainderBy step value == 0
+
+        Atom atom ->
+            isMatchAtomMonth atom value
+
+
+isMatchAtomMonth : Atom Month -> Int -> Bool
+isMatchAtomMonth atom value =
+    case atom of
+        Particle i ->
+            monthToInt i == value
+
+        Range start end ->
+            monthToInt start <= value && value <= monthToInt end
+
+
+isMatchExprInt : Expr Int -> Int -> Bool
+isMatchExprInt term value =
+    case term of
+        Single termValue ->
+            isMatchTermInt value termValue
+
+        Multiple terms ->
+            List.all (isMatchTermInt value) terms
+
+        Every ->
+            True
+
+
+isMatchTermInt : Int -> Term Int -> Bool
+isMatchTermInt value term =
+    case term of
+        Step atom step ->
+            isMatchAtomInt atom value && remainderBy step value == 0
+
+        EveryStep step ->
+            remainderBy step value == 0
+
+        Atom atom ->
+            isMatchAtomInt atom value
+
+
+isMatchAtomInt : Atom Int -> Int -> Bool
+isMatchAtomInt atom value =
+    case atom of
+        Particle i ->
+            i == value
+
+        Range start end ->
+            start <= value && value <= end
+
+
+weekdayToInt : Cron.WeekDay -> Int
+weekdayToInt weekDay =
+    case weekDay of
+        Sunday ->
+            0
+
+        Monday ->
+            1
+
+        Tuesday ->
+            2
+
+        Wednesday ->
+            3
+
+        Thursday ->
+            4
+
+        Friday ->
+            5
+
+        Saturday ->
+            6
+
+
+monthToInt : Month -> Int
+monthToInt month =
+    case month of
+        January ->
+            1
+
+        February ->
+            2
+
+        March ->
+            3
+
+        April ->
+            4
+
+        May ->
+            5
+
+        June ->
+            6
+
+        July ->
+            7
+
+        August ->
+            8
+
+        September ->
+            9
+
+        October ->
+            10
+
+        November ->
+            11
+
+        December ->
+            12
