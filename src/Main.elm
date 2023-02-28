@@ -2,7 +2,7 @@ module Main exposing (main)
 
 import Browser
 import Browser.Events exposing (onResize)
-import Colors exposing (black, blue, blueFocused, gray, grayColorbackground, grayFocused, white)
+import Colors exposing (black, blue, blueFocused, gray, grayColorbackground, grayFocused, red, white)
 import Config exposing (dayTitleSize, modalSecondColumnWidth, taskSize, weekDayWidth)
 import Cron exposing (Cron, WeekDay(..), fromString)
 import Date exposing (Date, Unit(..), add, day, format, fromIsoString, isBetween, month, toIsoString, today, year)
@@ -411,22 +411,26 @@ dayTitle value =
     el [ paddingXY 0 5, height (px dayTitleSize), centerX ] (text value)
 
 
-taskValueView : TaskValue -> Element Msg
-taskValueView task =
+taskValueView : (TaskValue -> Bool) -> TaskValue -> Element Msg
+taskValueView isFailed task =
     let
         extraAttr =
-            case task.status of
-                Done ->
-                    [ Font.strike ]
+            if isFailed task then
+                [ Font.light, Font.color red ]
 
-                Active ->
-                    []
+            else
+                case task.status of
+                    Done ->
+                        [ Font.strike ]
 
-                Cancel ->
-                    [ Font.strike ]
+                    Active ->
+                        []
 
-                Fail ->
-                    [ Font.light ]
+                    Cancel ->
+                        [ Font.strike ]
+
+                    Fail ->
+                        [ Font.light, Font.color gray ]
     in
     el
         ([ width fill
@@ -466,7 +470,7 @@ weekDay model dayDelta =
             filteredTaskPerDay model.today weekDayDate model.tasks
 
         emptyTasks count =
-            List.repeat count (taskValueView (emptyTaskValue weekDayDate))
+            List.repeat count (taskValueView (\_ -> False) (emptyTaskValue weekDayDate))
 
         totalCountOfTasksToShow =
             numberOfTaskToShow model.windowHeight
@@ -485,8 +489,13 @@ weekDay model dayDelta =
             else
                 dayTitle (format "E, d MMM y" weekDayDate)
 
-        viewTask task =
-            taskValueView task
+        isFailed taskValue =
+            case taskValue.taskType of
+                Slide _ ->
+                    Date.min model.today weekDayDate == weekDayDate && weekDayDate /= model.today
+
+                _ ->
+                    False
     in
     column
         [ Font.color black
@@ -497,14 +506,7 @@ weekDay model dayDelta =
         , padding 3
         , width (px weekDayWidth)
         ]
-        (title :: List.map viewTask weekDayTasks ++ emptyTasks emptyTaskCount)
-
-
-
--- TODO need to change the order of circles as numbers of tasks is bigger than number of days that we are showing
--- so we need to go first via all tasks and then days
--- after that there will be a dictionary that can be used in view function
--- TODO use dict to find tasks for days (there will be a special case for different types)
+        (title :: List.map (taskValueView isFailed) weekDayTasks ++ emptyTasks emptyTaskCount)
 
 
 filteredTaskPerDay : Date -> Date -> List TaskValue -> List TaskValue
@@ -522,7 +524,7 @@ showTaskAtDate today date taskValue =
             isBetween taskValue.date.date cronValue.endDate.date date && isCronMatchDate cronValue.cron date
 
         Slide end ->
-            isBetween taskValue.date.date end.date date && isBetween taskValue.date.date today date
+            isBetween taskValue.date.date (Date.min today end.date) date
 
 
 numberOfTaskToShow : Int -> Int

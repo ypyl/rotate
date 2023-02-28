@@ -36,3 +36,8 @@ grayColorbackground =
 black : Color
 black =
     rgb255 0 0 0
+
+
+red : Color
+red =
+    rgb255 239 68 68
