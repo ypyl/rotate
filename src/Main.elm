@@ -2,7 +2,7 @@ module Main exposing (main)
 
 import Browser
 import Browser.Events exposing (onResize)
-import Colors exposing (black, blue, blueFocused, gray, grayColorbackground, grayFocused, red, white)
+import Colors exposing (black, blue, blueFocused, gray, grayColorbackground, grayFocused, lightRed, red, white)
 import Config exposing (dayTitleSize, modalSecondColumnWidth, taskSize, weekDayWidth)
 import Cron exposing (Cron, WeekDay(..), fromString)
 import Date exposing (Date, Unit(..), add, day, format, fromIsoString, isBetween, month, toIsoString, today, year)
@@ -94,7 +94,6 @@ type TaskStatus
     = Done
     | Active
     | Cancel
-    | Fail
 
 
 type alias PassedCases =
@@ -112,7 +111,7 @@ init ( windowWidth, windowHeight ) =
       , today = initialDateValue
       , tasks =
             [ { value = "single", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, status = Active, taskType = Single, error = [] }
-            , { value = "slide", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, status = Active, taskType = Slide (initialStartDate 10), error = [] }
+            , { value = "slide", date = initialStartDate -5, createdDate = initialDateValue, editDate = initialDateValue, status = Active, taskType = Slide (initialStartDate 10), error = [] }
             , { value = "cron", date = initialStartDate -100, createdDate = initialDateValue, editDate = initialDateValue, status = Active, taskType = CronType initialCronTaskValue, error = [] }
             ]
       , editTask = Nothing
@@ -145,7 +144,7 @@ initDateModel initDate =
 
 initialDateValue : Date
 initialDateValue =
-    Date.fromCalendarDate 2023 Feb 25
+    Date.fromCalendarDate 2023 Mar 1
 
 
 type Msg
@@ -161,6 +160,7 @@ type Msg
     | EditTaskType RadioType
     | EditCronValue String
     | EditTaskEndDate String
+    | EditTaskStatus TaskStatus
     | NoOp
 
 
@@ -356,6 +356,18 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
+        EditTaskStatus newStatus ->
+            case model.editTask of
+                Just (EditTask originalTask t) ->
+                    let
+                        updatedTask =
+                            { t | status = newStatus }
+                    in
+                    ( { model | editTask = Just (EditTask originalTask updatedTask) }, Cmd.none )
+
+                Nothing ->
+                    ( model, Cmd.none )
+
         NoOp ->
             ( model, Cmd.none )
 
@@ -411,27 +423,8 @@ dayTitle value =
     el [ paddingXY 0 5, height (px dayTitleSize), centerX ] (text value)
 
 
-taskValueView : (TaskValue -> Bool) -> TaskValue -> Element Msg
-taskValueView isFailed task =
-    let
-        extraAttr =
-            if isFailed task then
-                [ Font.light, Font.color red ]
-
-            else
-                case task.status of
-                    Done ->
-                        [ Font.strike ]
-
-                    Active ->
-                        []
-
-                    Cancel ->
-                        [ Font.strike ]
-
-                    Fail ->
-                        [ Font.light, Font.color gray ]
-    in
+taskValueView : (TaskValue -> List (Element.Attribute Msg)) -> TaskValue -> Element Msg
+taskValueView extraAttr task =
     el
         ([ width fill
          , height (px taskSize)
@@ -441,7 +434,7 @@ taskValueView isFailed task =
          , onDoubleClick (EditTaskMsg task)
          , Html.Attributes.class "no-select" |> Element.htmlAttribute
          ]
-            ++ extraAttr
+            ++ (extraAttr task)
         )
         (text task.value)
 
@@ -470,7 +463,7 @@ weekDay model dayDelta =
             filteredTaskPerDay model.today weekDayDate model.tasks
 
         emptyTasks count =
-            List.repeat count (taskValueView (\_ -> False) (emptyTaskValue weekDayDate))
+            List.repeat count (taskValueView (\_ -> []) (emptyTaskValue weekDayDate))
 
         totalCountOfTasksToShow =
             numberOfTaskToShow model.windowHeight
@@ -489,24 +482,36 @@ weekDay model dayDelta =
             else
                 dayTitle (format "E, d MMM y" weekDayDate)
 
-        isFailed taskValue =
-            case taskValue.taskType of
-                Slide _ ->
-                    Date.min model.today weekDayDate == weekDayDate && weekDayDate /= model.today
+        extraAttr taskValue =
+            case (taskValue.taskType, taskValue.status) of
+                (Slide _, Active) ->
+                    if Date.min model.today weekDayDate == weekDayDate && weekDayDate /= model.today then
+                        [ Font.light, Font.color red ]
+                    else
+                        []
+
+                (CronType _, Active) ->
+                    if Date.min model.today weekDayDate == weekDayDate && weekDayDate /= model.today then
+                        [ Font.light, Font.color red ]
+                    else
+                        []
+
+                (_, Done) ->
+                    [ Font.strike ]
+
+                (_, Cancel) ->
+                    [ Font.strike ]
 
                 _ ->
-                    False
+                    []
     in
     column
         [ Font.color black
         , Border.color black
-
-        --, Border.width 1
-        , Border.rounded 3
         , padding 3
         , width (px weekDayWidth)
         ]
-        (title :: List.map (taskValueView isFailed) weekDayTasks ++ emptyTasks emptyTaskCount)
+        (title :: List.map (taskValueView extraAttr) weekDayTasks ++ emptyTasks emptyTaskCount)
 
 
 filteredTaskPerDay : Date -> Date -> List TaskValue -> List TaskValue
@@ -516,15 +521,15 @@ filteredTaskPerDay today date tasks =
 
 showTaskAtDate : Date -> Date -> TaskValue -> Bool
 showTaskAtDate today date taskValue =
-    case taskValue.taskType of
-        Single ->
+    case (taskValue.taskType, taskValue.status) of
+        (CronType cronValue, Active) ->
+            isBetween today cronValue.endDate.date date && isCronMatchDate cronValue.cron date
+
+        (Slide end, Active) ->
+            isBetween today (Date.min today end.date) date
+
+        _ ->
             taskValue.date.date == date
-
-        CronType cronValue ->
-            isBetween taskValue.date.date cronValue.endDate.date date && isCronMatchDate cronValue.cron date
-
-        Slide end ->
-            isBetween taskValue.date.date (Date.min today end.date) date
 
 
 numberOfTaskToShow : Int -> Int
@@ -589,8 +594,9 @@ editTaskView taskValue =
             [ spacing 5, width fill ]
     in
     column [ width fill, padding 10, spacing 10 ]
-        [ row twoRowAttr [ inputValueView taskValue.value, inputDateView taskValue.date ]
-        , row twoRowAttr [ inputTaskView taskValue.taskType, el [ alignRight ] (endDateView taskValue) ]
+        [ inputTaskStatusView taskValue.status
+        , row twoRowAttr [ inputValueView taskValue.value, inputDateView taskValue.date ]
+        , row twoRowAttr [ inputTaskTypeView taskValue.taskType, el [ alignRight ] (endDateView taskValue) ]
         , case taskValue.taskType of
             CronType cronTaskValue ->
                 if List.isEmpty taskValue.error then
@@ -608,6 +614,18 @@ editTaskView taskValue =
         , modalFooter (List.isEmpty taskValue.error |> not)
         ]
 
+inputTaskStatusView : TaskStatus -> Element Msg
+inputTaskStatusView taskStatus =
+    Input.radioRow [ spacing 10 ]
+        { onChange = EditTaskStatus
+        , options =
+            [ Input.option Active (text "Active")
+            , Input.option Cancel (text "Cancelled")
+            , Input.option Done (text "Done")
+            ]
+        , selected = Just taskStatus
+        , label = Input.labelHidden "inputTaskStatusView"
+        }
 
 endDateView : TaskValue -> Element Msg
 endDateView taskValue =
@@ -699,8 +717,8 @@ radioTypeToTaskType defaultEndDate radioType =
             Slide (initDateModel defaultEndDate)
 
 
-inputTaskView : TaskType -> Element Msg
-inputTaskView taskType =
+inputTaskTypeView : TaskType -> Element Msg
+inputTaskTypeView taskType =
     let
         selected =
             taskTypeToRadioType taskType
@@ -713,7 +731,7 @@ inputTaskView taskType =
             , Input.option SlideRadio (text "Slide")
             ]
         , selected = Just selected
-        , label = Input.labelHidden "inputTaskView"
+        , label = Input.labelHidden "inputTaskTypeView"
         }
 
 
