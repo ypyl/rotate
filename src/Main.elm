@@ -110,9 +110,15 @@ init ( windowWidth, windowHeight ) =
       , startDate = initialStartDate 0
       , today = initialDateValue
       , tasks =
-            [ { value = "single", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, status = Active, taskType = Single, error = [] }
-            , { value = "slide", date = initialStartDate -5, createdDate = initialDateValue, editDate = initialDateValue, status = Active, taskType = Slide (initialStartDate 10), error = [] }
-            , { value = "cron", date = initialStartDate -100, createdDate = initialDateValue, editDate = initialDateValue, status = Active, taskType = CronType initialCronTaskValue, error = [] }
+            [ { value = "single-active", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, status = Active, taskType = Single, error = [] }
+            , { value = "slide-active", date = initialStartDate -5, createdDate = initialDateValue, editDate = initialDateValue, status = Active, taskType = Slide (initialStartDate 10), error = [] }
+            , { value = "cron-active", date = initialStartDate -100, createdDate = initialDateValue, editDate = initialDateValue, status = Active, taskType = CronType initialCronTaskValue, error = [] }
+            , { value = "single-done", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, status = Done, taskType = Single, error = [] }
+            , { value = "slide-done", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, status = Done, taskType = Slide (initialStartDate 10), error = [] }
+            , { value = "cron-done", date = initialStartDate 9, createdDate = initialDateValue, editDate = initialDateValue, status = Done, taskType = CronType initialCronTaskValue, error = [] }
+            , { value = "single-cancel", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, status = Cancel, taskType = Single, error = [] }
+            , { value = "slide-cancel", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, status = Cancel, taskType = Slide (initialStartDate 10), error = [] }
+            , { value = "cron-cancel", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, status = Cancel, taskType = CronType initialCronTaskValue, error = [] }
             ]
       , editTask = Nothing
       }
@@ -144,7 +150,7 @@ initDateModel initDate =
 
 initialDateValue : Date
 initialDateValue =
-    Date.fromCalendarDate 2023 Mar 1
+    Date.fromCalendarDate 2023 Mar 4
 
 
 type Msg
@@ -177,14 +183,15 @@ update msg model =
             let
                 startDateModel =
                     model.startDate
-
-                updatedStartDate =
+            in
+            ( { model
+                | today = date
+                , startDate =
                     { startDateModel
                         | date = date
                         , dateText = Date.toIsoString date
                     }
-            in
-            ( { model | today = date, startDate = updatedStartDate }
+              }
             , Cmd.none
             )
 
@@ -194,14 +201,14 @@ update msg model =
                     let
                         startDateModel =
                             model.startDate
-
-                        updatedStartDate =
+                    in
+                    ( { model
+                        | startDate =
                             { startDateModel
                                 | date = newDateParser
                                 , dateText = newDate
                             }
-                    in
-                    ( { model | startDate = updatedStartDate }
+                      }
                     , Cmd.none
                     )
 
@@ -211,7 +218,7 @@ update msg model =
         SaveTask ->
             case model.editTask of
                 Just (EditTask originalTask updatedTask) ->
-                    ( { model | tasks = replaceTask originalTask updatedTask model.tasks, editTask = Nothing }, Cmd.none )
+                    ( { model | tasks = replaceTask originalTask { updatedTask | editDate = model.today } model.tasks, editTask = Nothing }, Cmd.none )
 
                 Nothing ->
                     ( model, Cmd.none )
@@ -221,12 +228,8 @@ update msg model =
 
         EditValue newValue ->
             case model.editTask of
-                Just (EditTask originalTask t) ->
-                    let
-                        updatedTask =
-                            { t | value = newValue }
-                    in
-                    ( { model | editTask = Just (EditTask originalTask updatedTask) }, Cmd.none )
+                Just (EditTask originalTask task) ->
+                    ( { model | editTask = Just (EditTask originalTask { task | value = newValue }) }, Cmd.none )
 
                 Nothing ->
                     ( model, Cmd.none )
@@ -236,12 +239,8 @@ update msg model =
 
         EditTaskType radioType ->
             case model.editTask of
-                Just (EditTask originalTask t) ->
-                    let
-                        updatedTask =
-                            { t | taskType = radioTypeToTaskType t.date.date radioType }
-                    in
-                    ( { model | editTask = Just (EditTask originalTask updatedTask) }, Cmd.none )
+                Just (EditTask originalTask task) ->
+                    ( { model | editTask = Just (EditTask originalTask { task | taskType = radioTypeToTaskType task.date.date radioType }) }, Cmd.none )
 
                 Nothing ->
                     ( model, Cmd.none )
@@ -287,18 +286,18 @@ update msg model =
 
         EditTaskDate newDate ->
             case ( model.editTask, fromIsoString newDate ) of
-                ( Just (EditTask originalTask t), Ok newParsedDate ) ->
+                ( Just (EditTask originalTask task), Ok newParsedDate ) ->
                     let
                         updatedTask =
-                            case t.taskType of
+                            case task.taskType of
                                 CronType cronValue ->
-                                    { t | date = updatedDateModel t.date, error = isThereStartDateAfterEndDate newParsedDate cronValue.endDate.date t.error }
+                                    { task | date = updatedDateModel task.date, error = isThereStartDateAfterEndDate newParsedDate cronValue.endDate.date task.error }
 
                                 Slide endDate ->
-                                    { t | date = updatedDateModel t.date, error = isThereStartDateAfterEndDate newParsedDate endDate.date t.error }
+                                    { task | date = updatedDateModel task.date, error = isThereStartDateAfterEndDate newParsedDate endDate.date task.error }
 
                                 Single ->
-                                    { t | date = updatedDateModel t.date }
+                                    { task | date = updatedDateModel task.date }
 
                         updatedDateModel modelToUpdate =
                             { modelToUpdate
@@ -315,15 +314,15 @@ update msg model =
 
         EditTaskEndDate newDate ->
             case ( model.editTask, fromIsoString newDate ) of
-                ( Just (EditTask originalTask t), Ok newParsedDate ) ->
-                    case t.taskType of
+                ( Just (EditTask originalTask task), Ok newParsedDate ) ->
+                    case task.taskType of
                         CronType cronValue ->
                             let
                                 updatedCronValue =
                                     { cronValue | endDate = updatedDateModel cronValue.endDate }
 
                                 updatedTask =
-                                    { t | taskType = CronType updatedCronValue, error = isThereStartDateAfterEndDate t.date.date newParsedDate t.error }
+                                    { task | taskType = CronType updatedCronValue, error = isThereStartDateAfterEndDate task.date.date newParsedDate task.error }
 
                                 updatedDateModel modelToUpdate =
                                     { modelToUpdate
@@ -338,7 +337,7 @@ update msg model =
                         Slide endDate ->
                             let
                                 updatedTask =
-                                    { t | taskType = Slide (updatedDateModel endDate), error = isThereStartDateAfterEndDate t.date.date newParsedDate t.error }
+                                    { task | taskType = Slide (updatedDateModel endDate), error = isThereStartDateAfterEndDate task.date.date newParsedDate task.error }
 
                                 updatedDateModel modelToUpdate =
                                     { modelToUpdate
@@ -359,11 +358,7 @@ update msg model =
         EditTaskStatus newStatus ->
             case model.editTask of
                 Just (EditTask originalTask t) ->
-                    let
-                        updatedTask =
-                            { t | status = newStatus }
-                    in
-                    ( { model | editTask = Just (EditTask originalTask updatedTask) }, Cmd.none )
+                    ( { model | editTask = Just (EditTask originalTask { t | status = newStatus }) }, Cmd.none )
 
                 Nothing ->
                     ( model, Cmd.none )
@@ -434,7 +429,7 @@ taskValueView extraAttr task =
          , onDoubleClick (EditTaskMsg task)
          , Html.Attributes.class "no-select" |> Element.htmlAttribute
          ]
-            ++ (extraAttr task)
+            ++ extraAttr task
         )
         (text task.value)
 
@@ -483,24 +478,26 @@ weekDay model dayDelta =
                 dayTitle (format "E, d MMM y" weekDayDate)
 
         extraAttr taskValue =
-            case (taskValue.taskType, taskValue.status) of
-                (Slide _, Active) ->
+            case ( taskValue.taskType, taskValue.status ) of
+                ( Slide _, Active ) ->
                     if Date.min model.today weekDayDate == weekDayDate && weekDayDate /= model.today then
                         [ Font.light, Font.color red ]
+
                     else
                         []
 
-                (CronType _, Active) ->
+                ( CronType _, Active ) ->
                     if Date.min model.today weekDayDate == weekDayDate && weekDayDate /= model.today then
                         [ Font.light, Font.color red ]
+
                     else
                         []
 
-                (_, Done) ->
+                ( _, Done ) ->
                     [ Font.strike ]
 
-                (_, Cancel) ->
-                    [ Font.strike ]
+                ( _, Cancel ) ->
+                    [ Font.strike, Font.italic, Font.light ]
 
                 _ ->
                     []
@@ -521,11 +518,11 @@ filteredTaskPerDay today date tasks =
 
 showTaskAtDate : Date -> Date -> TaskValue -> Bool
 showTaskAtDate today date taskValue =
-    case (taskValue.taskType, taskValue.status) of
-        (CronType cronValue, Active) ->
+    case ( taskValue.taskType, taskValue.status ) of
+        ( CronType cronValue, Active ) ->
             isBetween today cronValue.endDate.date date && isCronMatchDate cronValue.cron date
 
-        (Slide end, Active) ->
+        ( Slide end, Active ) ->
             isBetween today (Date.min today end.date) date
 
         _ ->
@@ -594,9 +591,9 @@ editTaskView taskValue =
             [ spacing 5, width fill ]
     in
     column [ width fill, padding 10, spacing 10 ]
-        [ inputTaskStatusView taskValue.status
-        , row twoRowAttr [ inputValueView taskValue.value, inputDateView taskValue.date ]
-        , row twoRowAttr [ inputTaskTypeView taskValue.taskType, el [ alignRight ] (endDateView taskValue) ]
+        [ row twoRowAttr [ inputTaskStatusView taskValue.status, el [ alignRight ] (inputDateView taskValue.date) ]
+        , row twoRowAttr [ inputValueView taskValue.value, el [ alignRight ] (endDateView taskValue) ]
+        , row twoRowAttr [ inputTaskTypeView taskValue.taskType ]
         , case taskValue.taskType of
             CronType cronTaskValue ->
                 if List.isEmpty taskValue.error then
@@ -614,6 +611,7 @@ editTaskView taskValue =
         , modalFooter (List.isEmpty taskValue.error |> not)
         ]
 
+
 inputTaskStatusView : TaskStatus -> Element Msg
 inputTaskStatusView taskStatus =
     Input.radioRow [ spacing 10 ]
@@ -626,6 +624,7 @@ inputTaskStatusView taskStatus =
         , selected = Just taskStatus
         , label = Input.labelHidden "inputTaskStatusView"
         }
+
 
 endDateView : TaskValue -> Element Msg
 endDateView taskValue =
