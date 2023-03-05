@@ -35,8 +35,8 @@ view model =
     let
         modalWindow =
             case model.editTask of
-                Just (EditTask _ _ t) ->
-                    [ grayBackground t |> inFront ]
+                Just (EditTask editDate _ task) ->
+                    [ grayBackground editDate task |> inFront ]
 
                 Nothing ->
                     []
@@ -514,15 +514,36 @@ weekDay model dayDelta =
             else
                 dayTitle (format "E, d MMM y" weekDayDate)
 
-        extraAttr : TaskValue -> List (Element.Attribute Msg)
-        extraAttr taskValue =
-            case taskValue.taskType of
-                CronType _ ->
+        cronExtraAttr : CronTaskValue -> List (Element.Attribute Msg)
+        cronExtraAttr cronValue =
+            let
+                caseForWeekDate =
+                    cronValue.cases |> List.filter (\c -> c.date == weekDayDate) |> List.head
+            in
+            case caseForWeekDate of
+                Just currentCase ->
+                    case currentCase.status of
+                        Done ->
+                            [ Font.strike ]
+
+                        Cancel ->
+                            [ Font.strike, Font.italic ]
+
+                        Active ->
+                            []
+
+                Nothing ->
                     if Date.min model.today weekDayDate == weekDayDate && weekDayDate /= model.today then
                         [ Font.color red ]
 
                     else
                         []
+
+        extraAttr : TaskValue -> List (Element.Attribute Msg)
+        extraAttr taskValue =
+            case taskValue.taskType of
+                CronType cronValue ->
+                    cronExtraAttr cronValue
 
                 Single Active ->
                     if Date.min model.today weekDayDate == weekDayDate && weekDayDate /= model.today then
@@ -617,18 +638,18 @@ dayInput model changeEvent =
         ]
 
 
-grayBackground : TaskValue -> Element Msg
-grayBackground taskValue =
+grayBackground : Date -> TaskValue -> Element Msg
+grayBackground editDate taskValue =
     el
         [ width fill
         , height fill
         , Background.color grayColorbackground
         ]
-        (modalView taskValue)
+        (modalView editDate taskValue)
 
 
-modalView : TaskValue -> Element Msg
-modalView taskValue =
+modalView : Date -> TaskValue -> Element Msg
+modalView editDate taskValue =
     el
         [ centerX
         , centerY
@@ -636,17 +657,17 @@ modalView taskValue =
         , Background.color white
         , Border.rounded 5
         ]
-        (editTaskView taskValue)
+        (editTaskView editDate taskValue)
 
 
-editTaskView : TaskValue -> Element Msg
-editTaskView taskValue =
+editTaskView : Date -> TaskValue -> Element Msg
+editTaskView editDate taskValue =
     let
         twoRowAttr =
             [ spacing 5, width fill ]
     in
     column [ width fill, padding 10, spacing 10 ]
-        [ row twoRowAttr [ inputTaskStatusView taskValue.taskType, el [ alignRight ] (inputDateView taskValue.date) ]
+        [ row twoRowAttr [ inputTaskStatusView editDate taskValue.taskType, el [ alignRight ] (inputDateView taskValue.date) ]
         , row twoRowAttr [ inputValueView taskValue.value, el [ alignRight ] (endDateView taskValue) ]
         , row twoRowAttr [ inputTaskTypeView taskValue.taskType ]
         , case taskValue.taskType of
@@ -667,13 +688,22 @@ editTaskView taskValue =
         ]
 
 
-inputTaskStatusView : TaskType -> Element Msg
-inputTaskStatusView taskType =
+inputTaskStatusView : Date -> TaskType -> Element Msg
+inputTaskStatusView editDate taskType =
     let
         selectedValue =
             case taskType of
-                CronType _ ->
-                    Active
+                CronType cronValue ->
+                    let
+                        caseForEditDate =
+                            cronValue.cases |> List.filter (\c -> c.date == editDate) |> List.head
+                    in
+                    case caseForEditDate of
+                        Just foundCase ->
+                            foundCase.status
+
+                        Nothing ->
+                            Active
 
                 Slide slideValue ->
                     slideValue.status
