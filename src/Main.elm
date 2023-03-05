@@ -116,12 +116,13 @@ init ( windowWidth, windowHeight ) =
       , today = initialDateValue
       , tasks =
             [ { value = "single-active", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, taskType = Single Active, error = [] }
-            , { value = "slide-active", date = initialStartDate -5, createdDate = initialDateValue, editDate = initialDateValue, taskType = Slide (initialSlideTaskValue Active), error = [] }
+            , { value = "slide-active", date = initialStartDate -5, createdDate = initialDateValue, editDate = initialDateValue, taskType = Slide (initialSlideTaskValue 10 Active), error = [] }
+            , { value = "slide-failed", date = initialStartDate -5, createdDate = initialDateValue, editDate = initialDateValue, taskType = Slide (initialSlideTaskValue -1 Active), error = [] }
             , { value = "cron-active", date = initialStartDate -100, createdDate = initialDateValue, editDate = initialDateValue, taskType = CronType initialCronTaskValue, error = [] }
             , { value = "single-done", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, taskType = Single Done, error = [] }
-            , { value = "slide-done", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, taskType = Slide (initialSlideTaskValue Done), error = [] }
+            , { value = "slide-done", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, taskType = Slide (initialSlideTaskValue 10 Done), error = [] }
             , { value = "single-cancel", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, taskType = Single Cancel, error = [] }
-            , { value = "slide-cancel", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, taskType = Slide (initialSlideTaskValue Cancel), error = [] }
+            , { value = "slide-cancel", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, taskType = Slide (initialSlideTaskValue 10 Cancel), error = [] }
             ]
       , editTask = Nothing
       }
@@ -129,9 +130,9 @@ init ( windowWidth, windowHeight ) =
     )
 
 
-initialSlideTaskValue : TaskStatus -> { endDate : { date : Date, dateText : String }, status : TaskStatus }
-initialSlideTaskValue status =
-    { endDate = initialStartDate 10, status = status }
+initialSlideTaskValue : Int -> TaskStatus -> { endDate : { date : Date, dateText : String }, status : TaskStatus }
+initialSlideTaskValue delta status =
+    { endDate = initialStartDate delta, status = status }
 
 
 initialCronTaskValue : { cron : Cron, cronEditValue : String, endDate : { date : Date, dateText : String }, cases : List a }
@@ -248,7 +249,7 @@ update msg model =
         EditTaskType radioType ->
             case model.editTask of
                 Just (EditTask taskDate originalTask task) ->
-                    ( { model | editTask = Just (EditTask taskDate originalTask { task | taskType = radioTypeToTaskType task radioType }) }, Cmd.none )
+                    ( { model | editTask = Just (EditTask taskDate originalTask { task | taskType = radioTypeToTaskType originalTask radioType }) }, Cmd.none )
 
                 Nothing ->
                     ( model, Cmd.none )
@@ -517,11 +518,15 @@ weekDay model dayDelta =
         extraAttr taskValue =
             case taskValue.taskType of
                 CronType _ ->
-                    []
+                    if Date.min model.today weekDayDate == weekDayDate && weekDayDate /= model.today then
+                        [ Font.color red ]
+
+                    else
+                        []
 
                 Single Active ->
-                    if Date.min taskValue.date.date weekDayDate == weekDayDate && Date.min model.today taskValue.date.date == taskValue.date.date && weekDayDate /= model.today then
-                        [ Font.strike ]
+                    if Date.min model.today weekDayDate == weekDayDate && weekDayDate /= model.today then
+                        [ Font.color red ]
 
                     else
                         []
@@ -535,7 +540,11 @@ weekDay model dayDelta =
                 Slide slideValue ->
                     case slideValue.status of
                         Active ->
-                            []
+                            if Date.min model.today weekDayDate == weekDayDate && weekDayDate /= model.today then
+                                [ Font.color red ]
+
+                            else
+                                []
 
                         Done ->
                             [ Font.strike ]
@@ -561,10 +570,15 @@ showTaskAtDate : Date -> Date -> TaskValue -> Bool
 showTaskAtDate today date taskValue =
     case taskValue.taskType of
         CronType cronValue ->
-            isBetween today cronValue.endDate.date date && isCronMatchDate cronValue.cron date
+            isBetween taskValue.date.date cronValue.endDate.date date && isCronMatchDate cronValue.cron date
 
         Slide slideValue ->
-            Date.min today slideValue.endDate.date == date
+            case slideValue.status of
+                Active ->
+                    Date.min today slideValue.endDate.date == date
+
+                _ ->
+                    taskValue.date.date == date
 
         _ ->
             taskValue.date.date == date
@@ -660,8 +674,10 @@ inputTaskStatusView taskType =
             case taskType of
                 CronType _ ->
                     Active
+
                 Slide slideValue ->
                     slideValue.status
+
                 Single status ->
                     status
     in
@@ -675,7 +691,6 @@ inputTaskStatusView taskType =
         , selected = Just selectedValue
         , label = Input.labelHidden "inputTaskStatusView"
         }
-
 
 
 endDateView : TaskValue -> Element Msg
@@ -756,16 +771,34 @@ taskTypeToRadioType taskType =
 
 
 radioTypeToTaskType : TaskValue -> RadioType -> TaskType
-radioTypeToTaskType task radioType =
-    case radioType of
-        SingleRadio ->
+radioTypeToTaskType originalTask radioType =
+    case ( radioType, originalTask.taskType ) of
+        ( SingleRadio, Single status ) ->
+            Single status
+
+        ( SingleRadio, Slide slideValue ) ->
+            Single slideValue.status
+
+        ( SingleRadio, CronType _ ) ->
             Single Active
 
-        CronRadio ->
-            CronType { cron = defaultCron, cronEditValue = cronToString defaultCron, endDate = initDateModel task.date.date, cases = [] }
+        ( CronRadio, Single _ ) ->
+            CronType { cron = defaultCron, cronEditValue = cronToString defaultCron, endDate = originalTask.date, cases = [] }
 
-        SlideRadio ->
-            Slide { endDate = initDateModel task.date.date, status = Active }
+        ( CronRadio, Slide slideValue ) ->
+            CronType { cron = defaultCron, cronEditValue = cronToString defaultCron, endDate = slideValue.endDate, cases = [] }
+
+        ( CronRadio, CronType cronValue ) ->
+            CronType cronValue
+
+        ( SlideRadio, Single status ) ->
+            Slide { endDate = originalTask.date, status = status }
+
+        ( SlideRadio, Slide slideValue ) ->
+            Slide slideValue
+
+        ( SlideRadio, CronType cronValue ) ->
+            Slide { endDate = cronValue.endDate, status = Active }
 
 
 inputTaskTypeView : TaskType -> Element Msg
