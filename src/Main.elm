@@ -18,6 +18,7 @@ import Humanizer exposing (toString)
 import Mappers exposing (cronToString, isCronMatchDate)
 import Task
 import Time exposing (Month(..))
+import Element exposing (alignLeft)
 
 
 main : Program ( Int, Int ) Model Msg
@@ -35,8 +36,12 @@ view model =
     let
         modalWindow =
             case model.editTask of
-                Just (EditTask editDate _ task) ->
-                    [ grayBackground editDate task |> inFront ]
+                Just (EditTask editDate originalTask task) ->
+                    let
+                        isNewTask =
+                            (emptyTaskValue originalTask.date.date |> Tuple.second) == originalTask
+                    in
+                    [ grayBackground isNewTask editDate task |> inFront ]
 
                 Nothing ->
                     []
@@ -176,6 +181,7 @@ type Msg
     | EditCronValue String
     | EditTaskEndDate String
     | EditTaskStatus TaskStatus
+    | DeleteTask
     | NoOp
 
 
@@ -228,6 +234,14 @@ update msg model =
             case model.editTask of
                 Just (EditTask _ originalTask updatedTask) ->
                     ( { model | tasks = replaceTask originalTask { updatedTask | editDate = model.today } model.tasks, editTask = Nothing }, Cmd.none )
+
+                Nothing ->
+                    ( model, Cmd.none )
+
+        DeleteTask ->
+            case model.editTask of
+                Just (EditTask _ originalTask _) ->
+                    ( { model | tasks = deleteTask originalTask model.tasks, editTask = Nothing }, Cmd.none )
 
                 Nothing ->
                     ( model, Cmd.none )
@@ -445,6 +459,11 @@ replaceTask toReplace newTask list =
         List.foldl check [] list |> List.reverse
 
 
+deleteTask : TaskValue -> List TaskValue -> List TaskValue
+deleteTask toDelete list =
+    List.filter (\i -> i /= toDelete) list
+
+
 subscriptions : Model -> Sub Msg
 subscriptions _ =
     onResize (\w h -> SetWindowWidthHeight w h)
@@ -638,18 +657,18 @@ dayInput model changeEvent =
         ]
 
 
-grayBackground : Date -> TaskValue -> Element Msg
-grayBackground editDate taskValue =
+grayBackground : Bool -> Date -> TaskValue -> Element Msg
+grayBackground isNewTask editDate taskValue =
     el
         [ width fill
         , height fill
         , Background.color grayColorbackground
         ]
-        (modalView editDate taskValue)
+        (modalView isNewTask editDate taskValue)
 
 
-modalView : Date -> TaskValue -> Element Msg
-modalView editDate taskValue =
+modalView : Bool -> Date -> TaskValue -> Element Msg
+modalView isNewTask editDate taskValue =
     el
         [ centerX
         , centerY
@@ -657,11 +676,11 @@ modalView editDate taskValue =
         , Background.color white
         , Border.rounded 5
         ]
-        (editTaskView editDate taskValue)
+        (editTaskView isNewTask editDate taskValue)
 
 
-editTaskView : Date -> TaskValue -> Element Msg
-editTaskView editDate taskValue =
+editTaskView : Bool -> Date -> TaskValue -> Element Msg
+editTaskView isNewTask editDate taskValue =
     let
         twoRowAttr =
             [ spacing 5, width fill ]
@@ -684,7 +703,7 @@ editTaskView editDate taskValue =
 
                 else
                     row twoRowAttr [ none, errorView taskValue.error ]
-        , modalFooter (List.isEmpty taskValue.error |> not)
+        , modalFooter isNewTask (List.isEmpty taskValue.error |> not)
         ]
 
 
@@ -859,9 +878,13 @@ inputCronView value =
         }
 
 
-modalFooter : Bool -> Element Msg
-modalFooter incorrectState =
-    row [ width fill, spacing 10 ] [ cancelButton, saveButton incorrectState ]
+modalFooter : Bool -> Bool -> Element Msg
+modalFooter isNewTask incorrectState =
+    row [ width fill, spacing 10 ]
+        [ if isNewTask then none else deleteButton
+        , cancelButton
+        , saveButton incorrectState
+        ]
 
 
 saveButton : Bool -> Element Msg
@@ -887,11 +910,27 @@ saveButton disabled =
             , Border.rounded 5
             , Font.color white
             , focused
-                [ Background.color blueFocused ]
+                []
             ]
             { onPress = Just SaveTask
             , label = text "Save"
             }
+
+
+deleteButton : Element Msg
+deleteButton =
+    button
+        [ Background.color red
+        , padding 10
+        , Border.rounded 5
+        , alignLeft
+        , Font.color white
+        , focused
+            []
+        ]
+        { onPress = Just DeleteTask
+        , label = text "Delete"
+        }
 
 
 cancelButton : Element Msg
@@ -903,7 +942,7 @@ cancelButton =
         , alignRight
         , Font.color white
         , focused
-            [ Background.color grayFocused ]
+            []
         ]
         { onPress = Just CancelEdit
         , label = text "Cancel"
