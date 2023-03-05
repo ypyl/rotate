@@ -377,19 +377,25 @@ update msg model =
                             case newStatus of
                                 Done ->
                                     let
-                                        updatedCases = { date = taskDate, status = Done } :: (cronValue.cases |> List.filter (\i -> i.date /= taskDate))
+                                        updatedCases =
+                                            { date = taskDate, status = Done } :: (cronValue.cases |> List.filter (\i -> i.date /= taskDate))
                                     in
                                     ( { model | editTask = Just (EditTask taskDate originalTask { task | taskType = CronType { cronValue | cases = updatedCases } }) }, Cmd.none )
+
                                 Cancel ->
                                     let
-                                        updatedCases = { date = taskDate, status = Cancel } :: (cronValue.cases |> List.filter (\i -> i.date /= taskDate))
+                                        updatedCases =
+                                            { date = taskDate, status = Cancel } :: (cronValue.cases |> List.filter (\i -> i.date /= taskDate))
                                     in
                                     ( { model | editTask = Just (EditTask taskDate originalTask { task | taskType = CronType { cronValue | cases = updatedCases } }) }, Cmd.none )
+
                                 Active ->
                                     let
-                                        updatedCases = cronValue.cases |> List.filter (\i -> i.date /= taskDate)
+                                        updatedCases =
+                                            cronValue.cases |> List.filter (\i -> i.date /= taskDate)
                                     in
                                     ( { model | editTask = Just (EditTask taskDate originalTask { task | taskType = CronType { cronValue | cases = updatedCases } }) }, Cmd.none )
+
                 Nothing ->
                     ( model, Cmd.none )
 
@@ -448,8 +454,8 @@ dayTitle value =
     el [ paddingXY 0 5, height (px dayTitleSize), centerX ] (text value)
 
 
-taskValueView : (TaskValue -> List (Element.Attribute Msg)) -> (Date, TaskValue) -> Element Msg
-taskValueView extraAttr (taskDate, task) =
+taskValueView : (TaskValue -> List (Element.Attribute Msg)) -> ( Date, TaskValue ) -> Element Msg
+taskValueView extraAttr ( taskDate, task ) =
     el
         ([ width fill
          , height (px taskSize)
@@ -464,7 +470,7 @@ taskValueView extraAttr (taskDate, task) =
         (text task.value)
 
 
-emptyTaskValue : Date -> (Date, TaskValue)
+emptyTaskValue : Date -> ( Date, TaskValue )
 emptyTaskValue date =
     let
         dateModel =
@@ -472,7 +478,7 @@ emptyTaskValue date =
             , dateText = toIsoString date
             }
     in
-    (date, { value = "", date = dateModel, createdDate = date, editDate = date, taskType = Single Active, error = [] })
+    ( date, { value = "", date = dateModel, createdDate = date, editDate = date, taskType = Single Active, error = [] } )
 
 
 weekDay : Model -> Int -> Element Msg
@@ -510,19 +516,32 @@ weekDay model dayDelta =
         extraAttr : TaskValue -> List (Element.Attribute Msg)
         extraAttr taskValue =
             case taskValue.taskType of
-                CronType _ -> []
+                CronType _ ->
+                    []
+
                 Single Active ->
                     if Date.min taskValue.date.date weekDayDate == weekDayDate && Date.min model.today taskValue.date.date == taskValue.date.date && weekDayDate /= model.today then
                         [ Font.strike ]
+
                     else
                         []
-                Single Done -> [ Font.strike ]
-                Single Cancel -> [ Font.strike, Font.italic ]
+
+                Single Done ->
+                    [ Font.strike ]
+
+                Single Cancel ->
+                    [ Font.strike, Font.italic ]
+
                 Slide slideValue ->
                     case slideValue.status of
-                        Active -> []
-                        Done -> [ Font.strike ]
-                        Cancel -> [ Font.strike, Font.italic ]
+                        Active ->
+                            []
+
+                        Done ->
+                            [ Font.strike ]
+
+                        Cancel ->
+                            [ Font.strike, Font.italic ]
     in
     column
         [ Font.color black
@@ -533,7 +552,7 @@ weekDay model dayDelta =
         (title :: List.map (taskValueView extraAttr) weekDayTasks ++ emptyTasks emptyTaskCount)
 
 
-filteredTaskPerDay : Date -> Date -> List TaskValue -> List (Date, TaskValue)
+filteredTaskPerDay : Date -> Date -> List TaskValue -> List ( Date, TaskValue )
 filteredTaskPerDay today date tasks =
     List.filter (showTaskAtDate today date) tasks |> List.map (Tuple.pair date)
 
@@ -545,7 +564,7 @@ showTaskAtDate today date taskValue =
             isBetween today cronValue.endDate.date date && isCronMatchDate cronValue.cron date
 
         Slide slideValue ->
-            (Date.min today slideValue.endDate.date) == date
+            Date.min today slideValue.endDate.date == date
 
         _ ->
             taskValue.date.date == date
@@ -636,42 +655,27 @@ editTaskView taskValue =
 
 inputTaskStatusView : TaskType -> Element Msg
 inputTaskStatusView taskType =
-    case taskType of
-        CronType _ ->
-            Input.radioRow [ spacing 10 ]
-                { onChange = EditTaskStatus
-                , options =
-                    [ Input.option Active (text "Active")
-                    , Input.option Cancel (text "Cancelled")
-                    , Input.option Done (text "Done")
-                    ]
-                , selected = Just Active
-                , label = Input.labelHidden "inputTaskStatusView"
-                }
+    let
+        selectedValue =
+            case taskType of
+                CronType _ ->
+                    Active
+                Slide slideValue ->
+                    slideValue.status
+                Single status ->
+                    status
+    in
+    Input.radioRow [ spacing 10 ]
+        { onChange = EditTaskStatus
+        , options =
+            [ Input.option Active (text "Active")
+            , Input.option Cancel (text "Cancelled")
+            , Input.option Done (text "Done")
+            ]
+        , selected = Just selectedValue
+        , label = Input.labelHidden "inputTaskStatusView"
+        }
 
-        Slide slideValue ->
-            Input.radioRow [ spacing 10 ]
-                { onChange = EditTaskStatus
-                , options =
-                    [ Input.option Active (text "Active")
-                    , Input.option Cancel (text "Cancelled")
-                    , Input.option Done (text "Done")
-                    ]
-                , selected = Just slideValue.status
-                , label = Input.labelHidden "inputTaskStatusView"
-                }
-
-        Single status ->
-            Input.radioRow [ spacing 10 ]
-                { onChange = EditTaskStatus
-                , options =
-                    [ Input.option Active (text "Active")
-                    , Input.option Cancel (text "Cancelled")
-                    , Input.option Done (text "Done")
-                    ]
-                , selected = Just status
-                , label = Input.labelHidden "inputTaskStatusView"
-                }
 
 
 endDateView : TaskValue -> Element Msg
