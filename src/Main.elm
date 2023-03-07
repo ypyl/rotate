@@ -40,8 +40,31 @@ view model =
                     let
                         isNewTask =
                             (emptyTaskValue originalTask.date.date |> Tuple.second) == originalTask
+
+                        alreadyPassed =
+                            case task.taskType of
+                                Slide slideValue ->
+                                    if Date.min model.today slideValue.endDate.date == slideValue.endDate.date && model.today /= slideValue.endDate.date then
+                                        True
+                                    else
+                                        False
+                                Single _ ->
+                                    Date.min model.today task.date.date == task.date.date && model.today /= task.date.date
+
+                                CronType cronValue ->
+                                    let
+                                        caseForEditDate =
+                                            cronValue.cases |> List.filter (\c -> c.date == editDate) |> List.head
+                                    in
+                                    case caseForEditDate of
+                                        Just foundCase ->
+                                            Date.min model.today foundCase.date == foundCase.date && model.today /= foundCase.date
+
+                                        Nothing ->
+                                            Date.min model.today editDate == editDate && editDate /= model.today
+
                     in
-                    [ grayBackground isNewTask editDate task |> inFront ]
+                    [ grayBackground alreadyPassed isNewTask editDate task |> inFront ]
 
                 Nothing ->
                     []
@@ -657,18 +680,18 @@ dayInput model changeEvent =
         ]
 
 
-grayBackground : Bool -> Date -> TaskValue -> Element Msg
-grayBackground isNewTask editDate taskValue =
+grayBackground : Bool -> Bool -> Date -> TaskValue -> Element Msg
+grayBackground alreadyPassed isNewTask editDate taskValue =
     el
         [ width fill
         , height fill
         , Background.color grayColorbackground
         ]
-        (modalView isNewTask editDate taskValue)
+        (modalView alreadyPassed isNewTask editDate taskValue)
 
 
-modalView : Bool -> Date -> TaskValue -> Element Msg
-modalView isNewTask editDate taskValue =
+modalView : Bool -> Bool -> Date -> TaskValue -> Element Msg
+modalView alreadyPassed isNewTask editDate taskValue =
     el
         [ centerX
         , centerY
@@ -676,17 +699,17 @@ modalView isNewTask editDate taskValue =
         , Background.color white
         , Border.rounded 5
         ]
-        (editTaskView isNewTask editDate taskValue)
+        (editTaskView alreadyPassed isNewTask editDate taskValue)
 
 
-editTaskView : Bool -> Date -> TaskValue -> Element Msg
-editTaskView isNewTask editDate taskValue =
+editTaskView : Bool -> Bool -> Date -> TaskValue -> Element Msg
+editTaskView alreadyPassed isNewTask editDate taskValue =
     let
         twoRowAttr =
             [ spacing 5, width fill ]
     in
     column [ width fill, padding 10, spacing 10 ]
-        [ row twoRowAttr [ inputTaskStatusView editDate taskValue.taskType, el [ alignRight ] (inputDateView taskValue.date) ]
+        [ row twoRowAttr [ inputTaskStatusView alreadyPassed editDate taskValue.taskType, el [ alignRight ] (inputDateView taskValue.date) ]
         , row twoRowAttr [ inputValueView taskValue.value, el [ alignRight ] (endDateView taskValue) ]
         , row twoRowAttr [ inputTaskTypeView taskValue.taskType ]
         , case taskValue.taskType of
@@ -707,8 +730,8 @@ editTaskView isNewTask editDate taskValue =
         ]
 
 
-inputTaskStatusView : Date -> TaskType -> Element Msg
-inputTaskStatusView editDate taskType =
+inputTaskStatusView : Bool -> Date -> TaskType -> Element Msg
+inputTaskStatusView alreadyPassed editDate taskType =
     let
         selectedValue =
             case taskType of
@@ -733,7 +756,7 @@ inputTaskStatusView editDate taskType =
     Input.radioRow [ spacing 10 ]
         { onChange = EditTaskStatus
         , options =
-            [ Input.option Active (text "Active")
+            [ Input.option Active (text (if alreadyPassed then "Failed" else "Active"))
             , Input.option Cancel (text "Cancelled")
             , Input.option Done (text "Done")
             ]
