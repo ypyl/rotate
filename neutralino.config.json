@@ -29,7 +29,7 @@
     "clientVersion": "3.8.0",
     "frontendLibrary": {
       "patchFile": "index.html",
-      "devUrl": "http://localhost:5174"
+      "devUrl": "http://localhost:5173"
     }
   }
 }

@@ -665,7 +665,7 @@ daysView model =
 
 numberOfWeekDayToShow : Int -> Int
 numberOfWeekDayToShow viewWidth =
-    viewWidth // weekDayWidth - 1
+    viewWidth // weekDayWidth
 
 
 dayInput : DateModel -> (String -> Msg) -> Element Msg
