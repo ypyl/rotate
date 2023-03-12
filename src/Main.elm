@@ -7,18 +7,23 @@ import Config exposing (dayTitleSize, modalSecondColumnWidth, taskSize, weekDayW
 import Cron exposing (Cron, WeekDay(..), fromString)
 import Date exposing (Date, Unit(..), add, day, format, fromCalendarDate, fromIsoString, isBetween, month, toIsoString, today, year)
 import DatePicker as DT
-import Element exposing (Element, alignLeft, alignRight, alignTop, centerX, centerY, column, el, fill, focused, height, html, htmlAttribute, inFront, layout, map, none, padding, paddingXY, paragraph, px, rgb255, row, spacing, text, width)
+import Element exposing (Element, alignLeft, alignRight, alignTop, behindContent, below, centerX, centerY, column, el, fill, focused, height, html, htmlAttribute, inFront, layout, map, none, padding, paddingEach, paddingXY, paragraph, px, rgb255, row, spacing, text, width)
 import Element.Background as Background
 import Element.Border as Border
-import Element.Events exposing (onDoubleClick)
+import Element.Events exposing (onClick, onDoubleClick)
 import Element.Font as Font
 import Element.Input as Input exposing (button, labelHidden)
-import Html exposing (Html)
-import Html.Attributes exposing (class, type_)
+import Html exposing (Attribute, Html)
+import Html.Attributes exposing (style)
 import Humanizer exposing (toString)
 import Mappers exposing (cronToString, isCronMatchDate)
 import Task
 import Time exposing (Month(..))
+import TypedSvg exposing (path, svg)
+import TypedSvg.Attributes as TSA
+import TypedSvg.Types exposing (Length(..), Paint(..), StrokeLinecap(..), StrokeLinejoin(..))
+import Element.Events exposing (onMouseLeave)
+import Element.Events exposing (onMouseEnter)
 
 
 main : Program ( Int, Int ) Model Msg
@@ -33,40 +38,7 @@ main =
 
 view : Model -> Html Msg
 view model =
-    let
-        modalWindow =
-            [ column [] [ DT.view model.dt |> map DT ] |> inFront ]
-
-        -- case model.editTask of
-        --     Just (EditTask editDate originalTask task) ->
-        --         let
-        --             isNewTask =
-        --                 (emptyTaskValue originalTask.date.date |> Tuple.second) == originalTask
-        --             alreadyPassed =
-        --                 case task.taskType of
-        --                     Slide slideValue ->
-        --                         if Date.min model.today slideValue.endDate.date == slideValue.endDate.date && model.today /= slideValue.endDate.date then
-        --                             True
-        --                         else
-        --                             False
-        --                     Single _ ->
-        --                         Date.min model.today task.date.date == task.date.date && model.today /= task.date.date
-        --                     CronType cronValue ->
-        --                         let
-        --                             caseForEditDate =
-        --                                 cronValue.cases |> List.filter (\c -> c.date == editDate) |> List.head
-        --                         in
-        --                         case caseForEditDate of
-        --                             Just foundCase ->
-        --                                 Date.min model.today foundCase.date == foundCase.date && model.today /= foundCase.date
-        --                             Nothing ->
-        --                                 Date.min model.today editDate == editDate && editDate /= model.today
-        --         in
-        --         [ grayBackground alreadyPassed isNewTask editDate task |> inFront ]
-        --     Nothing ->
-        --         []
-    in
-    layout modalWindow (daysView model)
+    layout ( onClick CloseDatePicker :: (modalWindow model)) (daysView model)
 
 
 type alias Model =
@@ -74,17 +46,17 @@ type alias Model =
     , windowWidth : Int
     , windowHeight : Int
     , today : Date
-    , startDate : DateModel
+    , startDate : Date
     , tasks : List TaskValue
     , editTask : Maybe EditTask
-    , dt : DT.Model
+    , dt : Maybe ( DatePickerType, DT.Model, Bool )
     }
 
 
-type alias DateModel =
-    { date : Date
-    , dateText : String
-    }
+type DatePickerType
+    = StartDate
+    | EditStartDate
+    | EditEndDate
 
 
 type EditTask
@@ -95,7 +67,7 @@ type alias TaskValue =
     { value : String
     , createdDate : Date
     , editDate : Date
-    , date : DateModel
+    , date : Date
     , taskType : TaskType
     , error : List String
     }
@@ -108,7 +80,7 @@ type TaskType
 
 
 type alias SlideTaskValue =
-    { endDate : DateModel
+    { endDate : Date
     , status : TaskStatus
     }
 
@@ -116,7 +88,7 @@ type alias SlideTaskValue =
 type alias CronTaskValue =
     { cron : Cron
     , cronEditValue : String
-    , endDate : DateModel
+    , endDate : Date
     , cases : List PassedCases
     }
 
@@ -151,18 +123,18 @@ init ( windowWidth, windowHeight ) =
             , { value = "slide-cancel", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, taskType = Slide (initialSlideTaskValue 10 Cancel), error = [] }
             ]
       , editTask = Nothing
-      , dt = DT.create (fromCalendarDate 2023 Mar 10)
+      , dt = Nothing
       }
     , Task.perform GetToday today
     )
 
 
-initialSlideTaskValue : Int -> TaskStatus -> { endDate : { date : Date, dateText : String }, status : TaskStatus }
+initialSlideTaskValue : Int -> TaskStatus -> { endDate : Date, status : TaskStatus }
 initialSlideTaskValue delta status =
     { endDate = initialStartDate delta, status = status }
 
 
-initialCronTaskValue : { cron : Cron, cronEditValue : String, endDate : { date : Date, dateText : String }, cases : List a }
+initialCronTaskValue : { cron : Cron, cronEditValue : String, endDate : Date, cases : List a }
 initialCronTaskValue =
     { cron = testCron, cronEditValue = cronToString testCron, endDate = initialStartDate 100, cases = [] }
 
@@ -172,16 +144,9 @@ testCron =
     Cron.Cron Cron.Every Cron.Every Cron.Every Cron.Every (Cron.Single (Cron.Atom (Cron.Range Monday Friday)))
 
 
-initialStartDate : Int -> { date : Date, dateText : String }
+initialStartDate : Int -> Date
 initialStartDate delta =
-    initDateModel (add Days delta initialDateValue)
-
-
-initDateModel : Date -> { date : Date, dateText : String }
-initDateModel initDate =
-    { date = initDate
-    , dateText = toIsoString initDate
-    }
+    add Days delta initialDateValue
 
 
 initialDateValue : Date
@@ -205,6 +170,9 @@ type Msg
     | EditTaskStatus TaskStatus
     | DeleteTask
     | DT DT.Msg
+    | ShowDatePicker Date DatePickerType
+    | CloseDatePicker
+    | MouseInDatePicker Bool
     | NoOp
 
 
@@ -212,11 +180,35 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         DT subMsg ->
-            let
-                updatedDtModel =
-                    DT.update subMsg model.dt
-            in
-            ( { model | dt = updatedDtModel }, Cmd.none )
+            case model.dt of
+                Just ( datePickerType, dtModel, mouseOnDT ) ->
+                    let
+                        updatedDtModel =
+                            DT.update subMsg dtModel
+                    in
+                    ( { model | dt = Just ( datePickerType, updatedDtModel, mouseOnDT ) }, Cmd.none )
+
+                Nothing ->
+                    ( model, Cmd.none )
+
+        ShowDatePicker date datePickerType ->
+            ( { model | dt = Just ( datePickerType, DT.create date, True ) }, Cmd.none )
+
+        MouseInDatePicker value ->
+            case model.dt of
+                Just ( datePickerType, dtModel, _ ) ->
+                    ( { model | dt = Just ( datePickerType, dtModel, value ) }, Cmd.none )
+
+                Nothing ->
+                    ( model, Cmd.none )
+
+        CloseDatePicker ->
+            case model.dt of
+                Just ( _, _, False ) ->
+                    ( { model | dt = Nothing }, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
 
         Name name ->
             ( { model | message = name }, Cmd.none )
@@ -225,17 +217,9 @@ update msg model =
             ( { model | windowWidth = width, windowHeight = height }, Cmd.none )
 
         GetToday date ->
-            let
-                startDateModel =
-                    model.startDate
-            in
             ( { model
                 | today = date
-                , startDate =
-                    { startDateModel
-                        | date = date
-                        , dateText = Date.toIsoString date
-                    }
+                , startDate = date
               }
             , Cmd.none
             )
@@ -243,16 +227,8 @@ update msg model =
         ChangeStartDate newDate ->
             case fromIsoString newDate of
                 Ok newDateParser ->
-                    let
-                        startDateModel =
-                            model.startDate
-                    in
                     ( { model
-                        | startDate =
-                            { startDateModel
-                                | date = newDateParser
-                                , dateText = newDate
-                            }
+                        | startDate = newDateParser
                       }
                     , Cmd.none
                     )
@@ -344,19 +320,13 @@ update msg model =
                         updatedTask =
                             case task.taskType of
                                 CronType cronValue ->
-                                    { task | date = updatedDateModel task.date, error = isThereStartDateAfterEndDate newParsedDate cronValue.endDate.date task.error }
+                                    { task | date = newParsedDate, error = isThereStartDateAfterEndDate newParsedDate cronValue.endDate task.error }
 
                                 Slide slideValue ->
-                                    { task | date = updatedDateModel task.date, error = isThereStartDateAfterEndDate newParsedDate slideValue.endDate.date task.error }
+                                    { task | date = newParsedDate, error = isThereStartDateAfterEndDate newParsedDate slideValue.endDate task.error }
 
                                 Single _ ->
-                                    { task | date = updatedDateModel task.date }
-
-                        updatedDateModel modelToUpdate =
-                            { modelToUpdate
-                                | date = newParsedDate
-                                , dateText = newDate
-                            }
+                                    { task | date = newParsedDate }
                     in
                     ( { model | editTask = Just (EditTask taskDate originalTask updatedTask) }
                     , Cmd.none
@@ -372,16 +342,10 @@ update msg model =
                         CronType cronValue ->
                             let
                                 updatedCronValue =
-                                    { cronValue | endDate = updatedDateModel cronValue.endDate }
+                                    { cronValue | endDate = newParsedDate }
 
                                 updatedTask =
-                                    { task | taskType = CronType updatedCronValue, error = isThereStartDateAfterEndDate task.date.date newParsedDate task.error }
-
-                                updatedDateModel modelToUpdate =
-                                    { modelToUpdate
-                                        | date = newParsedDate
-                                        , dateText = newDate
-                                    }
+                                    { task | taskType = CronType updatedCronValue, error = isThereStartDateAfterEndDate task.date newParsedDate task.error }
                             in
                             ( { model | editTask = Just (EditTask taskDate originalTask updatedTask) }
                             , Cmd.none
@@ -390,13 +354,7 @@ update msg model =
                         Slide slideValue ->
                             let
                                 updatedTask =
-                                    { task | taskType = Slide { slideValue | endDate = updatedDateModel slideValue.endDate }, error = isThereStartDateAfterEndDate task.date.date newParsedDate task.error }
-
-                                updatedDateModel modelToUpdate =
-                                    { modelToUpdate
-                                        | date = newParsedDate
-                                        , dateText = newDate
-                                    }
+                                    { task | taskType = Slide { slideValue | endDate = newParsedDate }, error = isThereStartDateAfterEndDate task.date newParsedDate task.error }
                             in
                             ( { model | editTask = Just (EditTask taskDate originalTask updatedTask) }
                             , Cmd.none
@@ -482,7 +440,7 @@ replaceTask toReplace newTask list =
             else
                 taskValue :: result
     in
-    if (emptyTaskValue toReplace.date.date |> Tuple.second) == toReplace then
+    if (emptyTaskValue toReplace.date |> Tuple.second) == toReplace then
         newTask :: list
 
     else
@@ -522,13 +480,7 @@ taskValueView extraAttr ( taskDate, task ) =
 
 emptyTaskValue : Date -> ( Date, TaskValue )
 emptyTaskValue date =
-    let
-        dateModel =
-            { date = date
-            , dateText = toIsoString date
-            }
-    in
-    ( date, { value = "", date = dateModel, createdDate = date, editDate = date, taskType = Single Active, error = [] } )
+    ( date, { value = "", date = date, createdDate = date, editDate = date, taskType = Single Active, error = [] } )
 
 
 weekDay : Model -> Int -> Element Msg
@@ -538,7 +490,7 @@ weekDay model dayDelta =
             1
 
         weekDayDate =
-            add Days dayDelta model.startDate.date
+            add Days dayDelta model.startDate
 
         weekDayTasks =
             filteredTaskPerDay model.today weekDayDate model.tasks
@@ -558,7 +510,7 @@ weekDay model dayDelta =
 
         title =
             if dayDelta == 0 then
-                dayInput model.startDate ChangeStartDate
+                dayInput model.startDate ChangeStartDate StartDate model.dt
 
             else
                 dayTitle (format "E, d MMM y" weekDayDate)
@@ -640,18 +592,18 @@ showTaskAtDate : Date -> Date -> TaskValue -> Bool
 showTaskAtDate today date taskValue =
     case taskValue.taskType of
         CronType cronValue ->
-            isBetween taskValue.date.date cronValue.endDate.date date && isCronMatchDate cronValue.cron date
+            isBetween taskValue.date cronValue.endDate date && isCronMatchDate cronValue.cron date
 
         Slide slideValue ->
             case slideValue.status of
                 Active ->
-                    Date.min today slideValue.endDate.date == date
+                    Date.min today slideValue.endDate == date
 
                 _ ->
-                    taskValue.date.date == date
+                    taskValue.date == date
 
         _ ->
-            taskValue.date.date == date
+            taskValue.date == date
 
 
 numberOfTaskToShow : Int -> Int
@@ -675,49 +627,110 @@ numberOfWeekDayToShow viewWidth =
     viewWidth // weekDayWidth
 
 
-dayInput : DateModel -> (String -> Msg) -> Element Msg
-dayInput model changeEvent =
-    row [ alignTop ]
-        [ Input.text [ type_ "date" |> htmlAttribute, class "date-input" |> htmlAttribute, Border.width 0, focused [], width modalSecondColumnWidth ]
-            { onChange = changeEvent
-            , text = model.dateText
-            , label = Input.labelHidden "dayInput"
-            , placeholder = Nothing
-            }
-        ]
+dayInput : Date -> (String -> Msg) -> DatePickerType -> Maybe ( DatePickerType, DT.Model, Bool ) -> Element Msg
+dayInput date changeEvent datePickerType dt =
+    let
+        datePickerView =
+            case dt of
+                Just ( dtType, dtModel, _ ) ->
+                    if dtType == datePickerType then
+                        DT.view dtModel |> map DT
+
+                    else
+                        none
+
+                Nothing ->
+                    none
+    in
+    button [ paddingXY 0 5, focused [] ]
+        { onPress = ShowDatePicker date datePickerType |> Just
+        , label =
+            row []
+                [ el [ paddingEach { top = 5, left = 0, right = 10, bottom = 5 }, height (px dayTitleSize), centerX ] (text (format "E, d MMM y" date))
+                , svg
+                    [ style "vertical-align" "middle"
+                    , TSA.width <| Px 24
+                    , TSA.height <| Px 24
+                    , TSA.viewBox 0 0 24 24
+                    , TSA.strokeWidth <| Px 1
+                    , TSA.fill PaintNone
+                    , TSA.strokeLinecap StrokeLinecapRound
+                    , TSA.strokeLinejoin StrokeLinejoinRound
+                    ]
+                    [ path [ TSA.stroke PaintNone, TSA.d "M0 0h24v24H0z", TSA.fill PaintNone ] []
+                    , path [ TSA.d "M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12z" ] []
+                    , path [ TSA.d "M16 3v4" ] []
+                    , path [ TSA.d "M8 3v4" ] []
+                    , path [ TSA.d "M4 11h16" ] []
+                    , path [ TSA.d "M11 15h1" ] []
+                    , path [ TSA.d "M12 15v3" ] []
+                    ]
+                    |> html
+                ]
+        }
+        |> el [ datePickerView |> below, onMouseLeave (MouseInDatePicker False), onMouseEnter (MouseInDatePicker True) ]
 
 
-grayBackground : Bool -> Bool -> Date -> TaskValue -> Element Msg
-grayBackground alreadyPassed isNewTask editDate taskValue =
-    el
-        [ width fill
-        , height fill
-        , Background.color grayColorbackground
-        ]
-        (modalView alreadyPassed isNewTask editDate taskValue)
+modalWindow : Model -> List (Element.Attribute Msg)
+modalWindow model =
+    case model.editTask of
+        Just (EditTask editDate originalTask taskValue) ->
+            let
+                isNewTask =
+                    (emptyTaskValue originalTask.date |> Tuple.second) == originalTask
+
+                alreadyPassed =
+                    case taskValue.taskType of
+                        Slide slideValue ->
+                            if Date.min model.today slideValue.endDate == slideValue.endDate && model.today /= slideValue.endDate then
+                                True
+
+                            else
+                                False
+
+                        Single _ ->
+                            Date.min model.today taskValue.date == taskValue.date && model.today /= taskValue.date
+
+                        CronType cronValue ->
+                            let
+                                caseForEditDate =
+                                    cronValue.cases |> List.filter (\c -> c.date == editDate) |> List.head
+                            in
+                            case caseForEditDate of
+                                Just foundCase ->
+                                    Date.min model.today foundCase.date == foundCase.date && model.today /= foundCase.date
+
+                                Nothing ->
+                                    Date.min model.today editDate == editDate && editDate /= model.today
+            in
+            [ editTaskView alreadyPassed isNewTask editDate taskValue model.dt
+                |> el
+                    [ centerX
+                    , centerY
+                    , Background.color white
+                    , Border.rounded 5
+                    ]
+                |> el
+                    [ width fill
+                    , height fill
+                    , Background.color grayColorbackground
+                    ]
+            ]
+                |> List.map inFront
+
+        Nothing ->
+            []
 
 
-modalView : Bool -> Bool -> Date -> TaskValue -> Element Msg
-modalView alreadyPassed isNewTask editDate taskValue =
-    el
-        [ centerX
-        , centerY
-        , width (px (weekDayWidth * 2))
-        , Background.color white
-        , Border.rounded 5
-        ]
-        (editTaskView alreadyPassed isNewTask editDate taskValue)
-
-
-editTaskView : Bool -> Bool -> Date -> TaskValue -> Element Msg
-editTaskView alreadyPassed isNewTask editDate taskValue =
+editTaskView : Bool -> Bool -> Date -> TaskValue -> Maybe ( DatePickerType, DT.Model, Bool ) -> Element Msg
+editTaskView alreadyPassed isNewTask editDate taskValue dt =
     let
         twoRowAttr =
-            [ spacing 5, width fill ]
+            [ spacing 10, width fill ]
     in
     column [ width fill, padding 10, spacing 10 ]
-        [ row twoRowAttr [ inputTaskStatusView alreadyPassed editDate taskValue.taskType, el [ alignRight ] (inputDateView taskValue.date) ]
-        , row twoRowAttr [ inputValueView taskValue.value, el [ alignRight ] (endDateView taskValue) ]
+        [ row twoRowAttr [ inputTaskStatusView alreadyPassed editDate taskValue.taskType, el [ alignRight ] (inputDateView taskValue.date EditStartDate dt) ]
+        , row twoRowAttr [ inputValueView taskValue.value, el [ alignRight ] (endDateView taskValue EditEndDate dt) ]
         , row twoRowAttr [ inputTaskTypeView taskValue.taskType ]
         , case taskValue.taskType of
             CronType cronTaskValue ->
@@ -780,22 +793,22 @@ inputTaskStatusView alreadyPassed editDate taskType =
         }
 
 
-endDateView : TaskValue -> Element Msg
-endDateView taskValue =
+endDateView : TaskValue -> DatePickerType -> Maybe ( DatePickerType, DT.Model, Bool ) -> Element Msg
+endDateView taskValue datePickerType dt =
     case taskValue.taskType of
         Single _ ->
             none
 
         CronType cronTaskValue ->
-            inputEndView cronTaskValue.endDate
+            inputEndView cronTaskValue.endDate datePickerType dt
 
         Slide slideTaskValue ->
-            inputEndView slideTaskValue.endDate
+            inputEndView slideTaskValue.endDate datePickerType dt
 
 
-inputEndView : DateModel -> Element Msg
-inputEndView dateModel =
-    dayInput dateModel EditTaskEndDate
+inputEndView : Date -> DatePickerType -> Maybe ( DatePickerType, DT.Model, Bool ) -> Element Msg
+inputEndView dateValue datePickerType dt =
+    dayInput dateValue EditTaskEndDate datePickerType dt
 
 
 errorView : List String -> Element msg
@@ -818,9 +831,9 @@ cronView strCron =
     paragraph [ Font.size 14, width modalSecondColumnWidth ] [ text result ]
 
 
-inputDateView : DateModel -> Element Msg
-inputDateView dateModel =
-    dayInput dateModel EditTaskDate
+inputDateView : Date -> DatePickerType -> Maybe ( DatePickerType, DT.Model, Bool ) -> Element Msg
+inputDateView dateValue datePickerType dt =
+    dayInput dateValue EditTaskDate datePickerType dt
 
 
 inputValueView : String -> Element Msg
