@@ -44,18 +44,9 @@ extractModel model =
             subModel
 
 
-getLastSelectedDate : Model -> Date
+getLastSelectedDate : Model -> Maybe Date
 getLastSelectedDate model =
-    let
-        internalModel =
-            extractModel model
-    in
-    case internalModel.lastSelectedDate of
-        Just d ->
-            d
-
-        Nothing ->
-            internalModel.today
+    extractModel model |> .lastSelectedDate
 
 
 type Msg
