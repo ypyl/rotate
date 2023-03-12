@@ -5,4 +5,8 @@ const app = Elm.Main.init({
   flags: [window.innerWidth, window.innerHeight]
 })
 
-window.Neutralino.init()
+try {
+  window.Neutralino.init()
+} catch {
+
+}

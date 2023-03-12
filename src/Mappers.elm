@@ -211,7 +211,7 @@ isMatchExprWeekDay term value =
             isMatchTermWeekDay value termValue
 
         Multiple terms ->
-            List.all (isMatchTermWeekDay value) terms
+            List.any (isMatchTermWeekDay value) terms
 
         Every ->
             True

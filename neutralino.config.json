@@ -12,12 +12,12 @@
   "modes": {
     "window": {
       "title": "Rotate",
-      "width": 800,
-      "height": 500,
-      "minWidth": 400,
-      "minHeight": 200,
+      "width": 1400,
+      "height": 1000,
+      "minWidth": 1000,
+      "minHeight": 800,
       "icon": "/dist/rotate.png",
-      "enableInspector": true
+      "enableInspector": false
     }
   },
   "cli": {

@@ -36,7 +36,14 @@ main =
 
 view : Model -> Html Msg
 view model =
-    layout (onClick CloseDatePicker :: modalWindow model) (daysView model)
+    let
+        attributesToAdd =
+            case model.dt of
+                Just ( _, _, False ) ->
+                    (onClick CloseDatePicker :: modalWindow model)
+                _ -> modalWindow model
+    in
+    layout attributesToAdd (daysView model)
 
 
 type alias Model =
@@ -110,16 +117,16 @@ init ( windowWidth, windowHeight ) =
       , windowHeight = windowHeight
       , startDate = initialStartDate 0
       , today = initialDateValue
-      , tasks =
-            [ { value = "single-active", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, taskType = Single Active, error = [] }
-            , { value = "slide-active", date = initialStartDate -5, createdDate = initialDateValue, editDate = initialDateValue, taskType = Slide (initialSlideTaskValue 10 Active), error = [] }
-            , { value = "slide-failed", date = initialStartDate -5, createdDate = initialDateValue, editDate = initialDateValue, taskType = Slide (initialSlideTaskValue -1 Active), error = [] }
-            , { value = "cron-active", date = initialStartDate -100, createdDate = initialDateValue, editDate = initialDateValue, taskType = CronType initialCronTaskValue, error = [] }
-            , { value = "single-done", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, taskType = Single Done, error = [] }
-            , { value = "slide-done", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, taskType = Slide (initialSlideTaskValue 10 Done), error = [] }
-            , { value = "single-cancel", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, taskType = Single Cancel, error = [] }
-            , { value = "slide-cancel", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, taskType = Slide (initialSlideTaskValue 10 Cancel), error = [] }
-            ]
+      , tasks = []
+            -- [ { value = "single-active", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, taskType = Single Active, error = [] }
+            -- , { value = "slide-active", date = initialStartDate -5, createdDate = initialDateValue, editDate = initialDateValue, taskType = Slide (initialSlideTaskValue 10 Active), error = [] }
+            -- , { value = "slide-failed", date = initialStartDate -5, createdDate = initialDateValue, editDate = initialDateValue, taskType = Slide (initialSlideTaskValue -1 Active), error = [] }
+            -- , { value = "cron-active", date = initialStartDate -100, createdDate = initialDateValue, editDate = initialDateValue, taskType = CronType initialCronTaskValue, error = [] }
+            -- , { value = "single-done", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, taskType = Single Done, error = [] }
+            -- , { value = "slide-done", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, taskType = Slide (initialSlideTaskValue 10 Done), error = [] }
+            -- , { value = "single-cancel", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, taskType = Single Cancel, error = [] }
+            -- , { value = "slide-cancel", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, taskType = Slide (initialSlideTaskValue 10 Cancel), error = [] }
+            -- ]
       , editTask = Nothing
       , dt = Nothing
       }
@@ -261,12 +268,7 @@ update msg model =
                     ( model, Cmd.none )
 
         CloseDatePicker ->
-            case model.dt of
-                Just ( _, _, False ) ->
-                    ( { model | dt = Nothing }, Cmd.none )
-
-                _ ->
-                    ( model, Cmd.none )
+            ( { model | dt = Nothing }, Cmd.none )
 
         Name name ->
             ( { model | message = name }, Cmd.none )
