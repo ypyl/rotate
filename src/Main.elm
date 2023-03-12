@@ -5,8 +5,9 @@ import Browser.Events exposing (onResize)
 import Colors exposing (black, blue, blueFocused, gray, grayColorbackground, grayFocused, lightRed, red, white)
 import Config exposing (dayTitleSize, modalSecondColumnWidth, taskSize, weekDayWidth)
 import Cron exposing (Cron, WeekDay(..), fromString)
-import Date exposing (Date, Unit(..), add, day, format, fromIsoString, isBetween, month, toIsoString, today, year)
-import Element exposing (Element, alignRight, alignTop, centerX, centerY, column, el, fill, focused, height, htmlAttribute, inFront, layout, none, padding, paddingXY, paragraph, px, rgb255, row, spacing, text, width)
+import Date exposing (Date, Unit(..), add, day, format, fromCalendarDate, fromIsoString, isBetween, month, toIsoString, today, year)
+import DatePicker as DT
+import Element exposing (Element, alignLeft, alignRight, alignTop, centerX, centerY, column, el, fill, focused, height, html, htmlAttribute, inFront, layout, map, none, padding, paddingXY, paragraph, px, rgb255, row, spacing, text, width)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Events exposing (onDoubleClick)
@@ -18,7 +19,6 @@ import Humanizer exposing (toString)
 import Mappers exposing (cronToString, isCronMatchDate)
 import Task
 import Time exposing (Month(..))
-import Element exposing (alignLeft)
 
 
 main : Program ( Int, Int ) Model Msg
@@ -35,39 +35,36 @@ view : Model -> Html Msg
 view model =
     let
         modalWindow =
-            case model.editTask of
-                Just (EditTask editDate originalTask task) ->
-                    let
-                        isNewTask =
-                            (emptyTaskValue originalTask.date.date |> Tuple.second) == originalTask
+            [ column [] [ DT.view model.dt |> map DT ] |> inFront ]
 
-                        alreadyPassed =
-                            case task.taskType of
-                                Slide slideValue ->
-                                    if Date.min model.today slideValue.endDate.date == slideValue.endDate.date && model.today /= slideValue.endDate.date then
-                                        True
-                                    else
-                                        False
-                                Single _ ->
-                                    Date.min model.today task.date.date == task.date.date && model.today /= task.date.date
-
-                                CronType cronValue ->
-                                    let
-                                        caseForEditDate =
-                                            cronValue.cases |> List.filter (\c -> c.date == editDate) |> List.head
-                                    in
-                                    case caseForEditDate of
-                                        Just foundCase ->
-                                            Date.min model.today foundCase.date == foundCase.date && model.today /= foundCase.date
-
-                                        Nothing ->
-                                            Date.min model.today editDate == editDate && editDate /= model.today
-
-                    in
-                    [ grayBackground alreadyPassed isNewTask editDate task |> inFront ]
-
-                Nothing ->
-                    []
+        -- case model.editTask of
+        --     Just (EditTask editDate originalTask task) ->
+        --         let
+        --             isNewTask =
+        --                 (emptyTaskValue originalTask.date.date |> Tuple.second) == originalTask
+        --             alreadyPassed =
+        --                 case task.taskType of
+        --                     Slide slideValue ->
+        --                         if Date.min model.today slideValue.endDate.date == slideValue.endDate.date && model.today /= slideValue.endDate.date then
+        --                             True
+        --                         else
+        --                             False
+        --                     Single _ ->
+        --                         Date.min model.today task.date.date == task.date.date && model.today /= task.date.date
+        --                     CronType cronValue ->
+        --                         let
+        --                             caseForEditDate =
+        --                                 cronValue.cases |> List.filter (\c -> c.date == editDate) |> List.head
+        --                         in
+        --                         case caseForEditDate of
+        --                             Just foundCase ->
+        --                                 Date.min model.today foundCase.date == foundCase.date && model.today /= foundCase.date
+        --                             Nothing ->
+        --                                 Date.min model.today editDate == editDate && editDate /= model.today
+        --         in
+        --         [ grayBackground alreadyPassed isNewTask editDate task |> inFront ]
+        --     Nothing ->
+        --         []
     in
     layout modalWindow (daysView model)
 
@@ -80,6 +77,7 @@ type alias Model =
     , startDate : DateModel
     , tasks : List TaskValue
     , editTask : Maybe EditTask
+    , dt : DT.Model
     }
 
 
@@ -153,6 +151,7 @@ init ( windowWidth, windowHeight ) =
             , { value = "slide-cancel", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, taskType = Slide (initialSlideTaskValue 10 Cancel), error = [] }
             ]
       , editTask = Nothing
+      , dt = DT.create (fromCalendarDate 2023 Mar 10)
       }
     , Task.perform GetToday today
     )
@@ -205,12 +204,20 @@ type Msg
     | EditTaskEndDate String
     | EditTaskStatus TaskStatus
     | DeleteTask
+    | DT DT.Msg
     | NoOp
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        DT subMsg ->
+            let
+                updatedDtModel =
+                    DT.update subMsg model.dt
+            in
+            ( { model | dt = updatedDtModel }, Cmd.none )
+
         Name name ->
             ( { model | message = name }, Cmd.none )
 
@@ -756,7 +763,15 @@ inputTaskStatusView alreadyPassed editDate taskType =
     Input.radioRow [ spacing 10 ]
         { onChange = EditTaskStatus
         , options =
-            [ Input.option Active (text (if alreadyPassed then "Failed" else "Active"))
+            [ Input.option Active
+                (text
+                    (if alreadyPassed then
+                        "Failed"
+
+                     else
+                        "Active"
+                    )
+                )
             , Input.option Cancel (text "Cancelled")
             , Input.option Done (text "Done")
             ]
@@ -904,7 +919,11 @@ inputCronView value =
 modalFooter : Bool -> Bool -> Element Msg
 modalFooter isNewTask incorrectState =
     row [ width fill, spacing 10 ]
-        [ if isNewTask then none else deleteButton
+        [ if isNewTask then
+            none
+
+          else
+            deleteButton
         , cancelButton
         , saveButton incorrectState
         ]
