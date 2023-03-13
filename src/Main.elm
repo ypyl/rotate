@@ -16,7 +16,10 @@ import Element.Input as Input exposing (button, labelHidden)
 import Html exposing (Html)
 import Html.Attributes exposing (style)
 import Humanizer exposing (toString)
+import Json.Decode
 import Mappers exposing (cronToString, isCronMatchDate)
+import Model exposing (CronTaskValue, DatePickerType(..), EditTask(..), Model, TaskStatus(..), TaskType(..), TaskValue)
+import Sync exposing (encodeModel, modelDecoder, setState)
 import Task
 import Time exposing (Month(..))
 import TypedSvg exposing (path, svg)
@@ -24,7 +27,7 @@ import TypedSvg.Attributes as TSA
 import TypedSvg.Types exposing (Length(..), Paint(..), StrokeLinecap(..), StrokeLinejoin(..))
 
 
-main : Program ( Int, Int ) Model Msg
+main : Program Json.Decode.Value Model Msg
 main =
     Browser.element
         { init = init
@@ -40,98 +43,42 @@ view model =
         attributesToAdd =
             case model.dt of
                 Just ( _, _, False ) ->
-                    (onClick CloseDatePicker :: modalWindow model)
-                _ -> modalWindow model
+                    onClick CloseDatePicker :: modalWindow model
+
+                _ ->
+                    modalWindow model
     in
     layout attributesToAdd (daysView model)
 
 
-type alias Model =
-    { message : String
-    , windowWidth : Int
-    , windowHeight : Int
-    , today : Date
-    , startDate : Date
-    , tasks : List TaskValue
-    , editTask : Maybe EditTask
-    , dt : Maybe ( DatePickerType, DT.Model, Bool )
-    }
-
-
-type DatePickerType
-    = StartDate
-    | EditStartDate
-    | EditEndDate
-
-
-type EditTask
-    = EditTask Date TaskValue TaskValue
-
-
-type alias TaskValue =
-    { value : String
-    , createdDate : Date
-    , editDate : Date
-    , date : Date
-    , taskType : TaskType
-    , error : List String
-    }
-
-
-type TaskType
-    = Single TaskStatus
-    | CronType CronTaskValue
-    | Slide SlideTaskValue
-
-
-type alias SlideTaskValue =
-    { endDate : Date
-    , status : TaskStatus
-    }
-
-
-type alias CronTaskValue =
-    { cron : Cron
-    , cronEditValue : String
-    , endDate : Date
-    , cases : List PassedCases
-    }
-
-
-type TaskStatus
-    = Done
-    | Active
-    | Cancel
-
-
-type alias PassedCases =
-    { date : Date
-    , status : TaskStatus
-    }
-
-
-init : ( Int, Int ) -> ( Model, Cmd Msg )
-init ( windowWidth, windowHeight ) =
-    ( { message = "hey"
-      , windowWidth = windowWidth
-      , windowHeight = windowHeight
-      , startDate = initialStartDate 0
-      , today = initialDateValue
-      , tasks = []
-            -- [ { value = "single-active", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, taskType = Single Active, error = [] }
-            -- , { value = "slide-active", date = initialStartDate -5, createdDate = initialDateValue, editDate = initialDateValue, taskType = Slide (initialSlideTaskValue 10 Active), error = [] }
-            -- , { value = "slide-failed", date = initialStartDate -5, createdDate = initialDateValue, editDate = initialDateValue, taskType = Slide (initialSlideTaskValue -1 Active), error = [] }
-            -- , { value = "cron-active", date = initialStartDate -100, createdDate = initialDateValue, editDate = initialDateValue, taskType = CronType initialCronTaskValue, error = [] }
-            -- , { value = "single-done", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, taskType = Single Done, error = [] }
-            -- , { value = "slide-done", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, taskType = Slide (initialSlideTaskValue 10 Done), error = [] }
-            -- , { value = "single-cancel", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, taskType = Single Cancel, error = [] }
-            -- , { value = "slide-cancel", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, taskType = Slide (initialSlideTaskValue 10 Cancel), error = [] }
-            -- ]
-      , editTask = Nothing
-      , dt = Nothing
-      }
-    , Task.perform GetToday today
-    )
+init : Json.Decode.Value -> ( Model, Cmd Msg )
+init flagValue =
+    let
+        decodedValue =
+            Json.Decode.decodeValue modelDecoder flagValue
+    in
+    case decodedValue of
+        Ok parsedModel -> ( parsedModel, Cmd.none )
+        Err err ->
+            ( { windowWidth = 800
+            , windowHeight = 600
+            , startDate = initialStartDate 0
+            , today = initialDateValue
+            , tasks =
+                    [ { value = "single-active", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, taskType = Single Active, error = [] }
+                    , { value = "slide-active", date = initialStartDate -5, createdDate = initialDateValue, editDate = initialDateValue, taskType = Slide (initialSlideTaskValue 10 Active), error = [] }
+                    , { value = "slide-failed", date = initialStartDate -5, createdDate = initialDateValue, editDate = initialDateValue, taskType = Slide (initialSlideTaskValue -1 Active), error = [] }
+                    , { value = "cron-active", date = initialStartDate -100, createdDate = initialDateValue, editDate = initialDateValue, taskType = CronType initialCronTaskValue, error = [] }
+                    , { value = "single-done", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, taskType = Single Done, error = [] }
+                    , { value = "slide-done", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, taskType = Slide (initialSlideTaskValue 10 Done), error = [] }
+                    , { value = "single-cancel", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, taskType = Single Cancel, error = [] }
+                    , { value = "slide-cancel", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, taskType = Slide (initialSlideTaskValue 10 Cancel), error = [] }
+                    ]
+            , editTask = Nothing
+            , dt = Nothing
+            }
+            , Task.perform GetToday today
+            )
 
 
 initialSlideTaskValue : Int -> TaskStatus -> { endDate : Date, status : TaskStatus }
@@ -160,8 +107,7 @@ initialDateValue =
 
 
 type Msg
-    = Name String
-    | SetWindowWidthHeight Int Int
+    = SetWindowWidthHeight Int Int
     | GetToday Date
     | SaveTask
     | CancelEdit
@@ -270,9 +216,6 @@ update msg model =
         CloseDatePicker ->
             ( { model | dt = Nothing }, Cmd.none )
 
-        Name name ->
-            ( { model | message = name }, Cmd.none )
-
         SetWindowWidthHeight width height ->
             ( { model | windowWidth = width, windowHeight = height }, Cmd.none )
 
@@ -287,7 +230,9 @@ update msg model =
         SaveTask ->
             case model.editTask of
                 Just (EditTask _ originalTask updatedTask) ->
-                    ( { model | tasks = replaceTask originalTask { updatedTask | editDate = model.today } model.tasks, editTask = Nothing }, Cmd.none )
+                    ( { model | tasks = replaceTask originalTask { updatedTask | editDate = model.today } model.tasks, editTask = Nothing }
+                    , model |> encodeModel |> setState
+                    )
 
                 Nothing ->
                     ( model, Cmd.none )
@@ -449,7 +394,8 @@ deleteTask toDelete list =
 
 subscriptions : Model -> Sub Msg
 subscriptions _ =
-    onResize (\w h -> SetWindowWidthHeight w h)
+    Sub.batch
+        [ onResize (\w h -> SetWindowWidthHeight w h) ]
 
 
 dayTitle : String -> Element msg
