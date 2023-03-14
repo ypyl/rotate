@@ -108,7 +108,7 @@ taskDecoder =
         (D.field "editDate" D.string |> D.andThen dateDecode)
         (D.field "date" D.string |> D.andThen dateDecode)
         (D.field "taskType" taskTypeDecoder)
-        (D.field "error" (D.succeed []))
+        (D.succeed [])
 
 
 dateDecode : String -> D.Decoder Date
@@ -168,7 +168,7 @@ cronTypeDecoder =
 
 cronDecode : String -> D.Decoder Cron
 cronDecode crontString =
-    case fromString crontString of
+    case fromString ("* * " ++ crontString) of
         Ok d ->
             D.succeed d
 

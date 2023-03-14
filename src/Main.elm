@@ -25,6 +25,7 @@ import Time exposing (Month(..))
 import TypedSvg exposing (path, svg)
 import TypedSvg.Attributes as TSA
 import TypedSvg.Types exposing (Length(..), Paint(..), StrokeLinecap(..), StrokeLinejoin(..))
+import Json.Decode exposing (errorToString)
 
 
 main : Program Json.Decode.Value Model Msg
@@ -60,20 +61,14 @@ init flagValue =
     case decodedValue of
         Ok parsedModel -> ( parsedModel, Cmd.none )
         Err err ->
+            let
+                _ = Debug.log "err" (errorToString err)
+            in
             ( { windowWidth = 800
             , windowHeight = 600
             , startDate = initialStartDate 0
             , today = initialDateValue
-            , tasks =
-                    [ { value = "single-active", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, taskType = Single Active, error = [] }
-                    , { value = "slide-active", date = initialStartDate -5, createdDate = initialDateValue, editDate = initialDateValue, taskType = Slide (initialSlideTaskValue 10 Active), error = [] }
-                    , { value = "slide-failed", date = initialStartDate -5, createdDate = initialDateValue, editDate = initialDateValue, taskType = Slide (initialSlideTaskValue -1 Active), error = [] }
-                    , { value = "cron-active", date = initialStartDate -100, createdDate = initialDateValue, editDate = initialDateValue, taskType = CronType initialCronTaskValue, error = [] }
-                    , { value = "single-done", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, taskType = Single Done, error = [] }
-                    , { value = "slide-done", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, taskType = Slide (initialSlideTaskValue 10 Done), error = [] }
-                    , { value = "single-cancel", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, taskType = Single Cancel, error = [] }
-                    , { value = "slide-cancel", date = initialStartDate 0, createdDate = initialDateValue, editDate = initialDateValue, taskType = Slide (initialSlideTaskValue 10 Cancel), error = [] }
-                    ]
+            , tasks = []
             , editTask = Nothing
             , dt = Nothing
             }
