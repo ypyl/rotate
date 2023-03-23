@@ -1,7 +1,9 @@
-module Mappers exposing (cronToString, isCronMatchDate)
+module Mappers exposing (..)
 
 import Cron exposing (Atom(..), Cron(..), Expr(..), Month(..), Term(..), WeekDay(..))
 import Date exposing (Date, day, month, monthToNumber, weekday, weekdayToNumber)
+import Model exposing (CronTask, CronTaskStatus(..), SingleTask, SingleTaskStatus(..), SlideTask, SlideTaskStatus(..), TaskStatus(..))
+import Model exposing (TaskValue)
 
 
 cronToString : Cron -> String
@@ -375,3 +377,163 @@ monthToInt month =
 
         December ->
             12
+
+
+mapTaskStatusToSingleTaskStatus : TaskStatus -> SingleTaskStatus
+mapTaskStatusToSingleTaskStatus status =
+    case status of
+        Active ->
+            SingleActive
+
+        Done ->
+            SingleDone
+
+        Cancel ->
+            SingleCancel
+
+
+mapSingleTaskStatusToTaskStatus : SingleTaskStatus -> TaskStatus
+mapSingleTaskStatusToTaskStatus status =
+    case status of
+        SingleActive ->
+            Active
+
+        SingleDone ->
+            Done
+
+        SingleCancel ->
+            Cancel
+
+
+mapTaskStatusToSlideTaskStatus : TaskStatus -> Date -> SlideTaskStatus
+mapTaskStatusToSlideTaskStatus status statusChangedDate =
+    case status of
+        Active ->
+            SlideActive
+
+        Done ->
+            SlideDone statusChangedDate
+
+        Cancel ->
+            SlideCancel statusChangedDate
+
+
+mapSlideTaskStatusToTaskStatus : SlideTaskStatus -> TaskStatus
+mapSlideTaskStatusToTaskStatus status =
+    case status of
+        SlideActive ->
+            Active
+
+        SlideDone _ ->
+            Done
+
+        SlideCancel _ ->
+            Cancel
+
+
+mapCronTaskStatusToTaskStatus : CronTaskStatus -> TaskStatus
+mapCronTaskStatusToTaskStatus status =
+    case status of
+        CronDone ->
+            Done
+
+        CronCancel ->
+            Cancel
+
+
+mapSingleTaskStatusToSlideTaskStatus : Date -> SingleTaskStatus -> SlideTaskStatus
+mapSingleTaskStatusToSlideTaskStatus date status =
+    case status of
+        SingleActive ->
+            SlideActive
+
+        SingleDone ->
+            SlideDone date
+
+        SingleCancel ->
+            SlideCancel date
+
+
+mapSingleTaskToSlide : SingleTask -> SlideTask
+mapSingleTaskToSlide singleTask =
+    SlideTask
+        singleTask.value
+        singleTask.createdDate
+        singleTask.editDate
+        singleTask.date
+        singleTask.date
+        (mapSingleTaskStatusToSlideTaskStatus singleTask.date singleTask.status)
+        Nothing
+
+
+mapSingleTaskToCron : SingleTask -> CronTask
+mapSingleTaskToCron singleTask =
+    CronTask
+        singleTask.value
+        singleTask.createdDate
+        singleTask.editDate
+        singleTask.date
+        singleTask.date
+        (Cron Every Every Every Every Every)
+        ""
+        []
+        ( Nothing, Nothing )
+
+
+mapSlideTaskStatusToSingleTaskStatus : SlideTaskStatus -> SingleTaskStatus
+mapSlideTaskStatusToSingleTaskStatus status =
+    case status of
+        SlideActive ->
+            SingleActive
+
+        SlideDone _ ->
+            SingleDone
+
+        SlideCancel _ ->
+            SingleCancel
+
+
+mapSlideTaskToSingle : SlideTask -> SingleTask
+mapSlideTaskToSingle slideTask =
+    SingleTask
+        slideTask.value
+        slideTask.createdDate
+        slideTask.editDate
+        slideTask.startDate
+        (mapSlideTaskStatusToSingleTaskStatus slideTask.status)
+
+
+mapSlideTaskToCron : SlideTask -> CronTask
+mapSlideTaskToCron slideTask =
+    CronTask
+        slideTask.value
+        slideTask.createdDate
+        slideTask.editDate
+        slideTask.startDate
+        slideTask.endDate
+        (Cron Every Every Every Every Every)
+        ""
+        []
+        ( Nothing, Nothing )
+
+
+mapCronTaskToSingle : CronTask -> SingleTask
+mapCronTaskToSingle cronTask =
+    SingleTask
+        cronTask.value
+        cronTask.createdDate
+        cronTask.editDate
+        cronTask.startDate
+        SingleActive
+
+
+mapCronTaskToSlide : CronTask -> SlideTask
+mapCronTaskToSlide cronTask =
+    SlideTask
+        cronTask.value
+        cronTask.createdDate
+        cronTask.editDate
+        cronTask.startDate
+        cronTask.endDate
+        SlideActive
+        Nothing

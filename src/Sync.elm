@@ -5,7 +5,7 @@ import Date exposing (Date, fromIsoString, toIsoString)
 import Json.Decode as D
 import Json.Encode as E
 import Mappers exposing (cronToString)
-import Model exposing (CronTaskValue, Model, PassedCase, SlideTaskValue, TaskStatus(..), TaskType(..), TaskValue)
+import Model exposing (CronTask, CronTaskStatus(..), Model, PassedCase, SingleTask, SingleTaskStatus(..), SlideTask, SlideTaskStatus(..), TaskValue(..))
 import Time exposing (Month(..))
 
 
@@ -23,63 +23,100 @@ encodeModel model =
 
 encodeTaskValue : TaskValue -> E.Value
 encodeTaskValue taskValue =
+    case taskValue of
+        Single item ->
+            encodeSingleTaskValue item
+
+        Slide item ->
+            encodeSlideTaskValue item
+
+        CronType item ->
+            encodeCronTaskValue item
+
+
+encodeSingleTaskValue : SingleTask -> E.Value
+encodeSingleTaskValue taskValue =
     E.object
         [ ( "value", E.string taskValue.value )
         , ( "createdDate", E.string (toIsoString taskValue.createdDate) )
         , ( "editDate", E.string (toIsoString taskValue.editDate) )
         , ( "date", E.string (toIsoString taskValue.date) )
-        , ( "taskType", encodeTaskType taskValue.taskType )
+        , ( "status", encodeSingleTaskStatus taskValue.status )
         ]
 
 
-encodeTaskType : TaskType -> E.Value
-encodeTaskType taskType =
-    case taskType of
-        Single taskStatus ->
-            encodeTaskStatus taskStatus
+encodeSlideTaskValue : SlideTask -> E.Value
+encodeSlideTaskValue taskValue =
+    E.object
+        [ ( "value", E.string taskValue.value )
+        , ( "createdDate", E.string (toIsoString taskValue.createdDate) )
+        , ( "editDate", E.string (toIsoString taskValue.editDate) )
+        , ( "startDate", E.string (toIsoString taskValue.startDate) )
+        , ( "endDate", E.string (toIsoString taskValue.endDate) )
+        , ( "status", encodeSlideTaskStatus taskValue.status )
+        ]
 
-        Slide slideTaskValue ->
-            encodeSlideTaskValue slideTaskValue
 
-        CronType cronTaskValue ->
-            encodeCrontTaskValue cronTaskValue
+encodeCronTaskValue : CronTask -> E.Value
+encodeCronTaskValue taskValue =
+    E.object
+        [ ( "value", E.string taskValue.value )
+        , ( "createdDate", E.string (toIsoString taskValue.createdDate) )
+        , ( "editDate", E.string (toIsoString taskValue.editDate) )
+        , ( "startDate", E.string (toIsoString taskValue.startDate) )
+        , ( "endDate", E.string (toIsoString taskValue.endDate) )
+        , ( "cron", E.string (cronToString taskValue.cron) )
+        , ( "cases", E.list encodePassedCases taskValue.cases )
+        ]
 
 
-encodeTaskStatus : TaskStatus -> E.Value
-encodeTaskStatus taskStatus =
+encodeSingleTaskStatus : SingleTaskStatus -> E.Value
+encodeSingleTaskStatus taskStatus =
     case taskStatus of
-        Active ->
+        SingleActive ->
             E.string "active"
 
-        Done ->
+        SingleDone ->
             E.string "done"
 
-        Cancel ->
+        SingleCancel ->
             E.string "cancel"
 
 
-encodeSlideTaskValue : SlideTaskValue -> E.Value
-encodeSlideTaskValue slideTaskValue =
-    E.object
-        [ ( "endDate", E.string (toIsoString slideTaskValue.endDate) )
-        , ( "status", encodeTaskStatus slideTaskValue.status )
-        ]
+encodeCronTaskStatus : CronTaskStatus -> E.Value
+encodeCronTaskStatus taskStatus =
+    case taskStatus of
+        CronDone ->
+            E.string "done"
+
+        CronCancel ->
+            E.string "cancel"
 
 
-encodeCrontTaskValue : CronTaskValue -> E.Value
-encodeCrontTaskValue cronTaskValue =
-    E.object
-        [ ( "endDate", E.string (toIsoString cronTaskValue.endDate) )
-        , ( "cron", E.string (cronToString cronTaskValue.cron) )
-        , ( "cases", E.list encodePassedCases cronTaskValue.cases )
-        ]
+encodeSlideTaskStatus : SlideTaskStatus -> E.Value
+encodeSlideTaskStatus taskStatus =
+    case taskStatus of
+        SlideActive ->
+            E.string "active"
+
+        SlideDone doneDate ->
+            E.object
+                [ ( "value", E.string "done" )
+                , ( "date", E.string (toIsoString doneDate) )
+                ]
+
+        SlideCancel cancelDate ->
+            E.object
+                [ ( "value", E.string "cancel" )
+                , ( "date", E.string (toIsoString cancelDate) )
+                ]
 
 
 encodePassedCases : PassedCase -> E.Value
 encodePassedCases passedCase =
     E.object
         [ ( "date", E.string (toIsoString passedCase.date) )
-        , ( "status", encodeTaskStatus passedCase.status )
+        , ( "status", encodeCronTaskStatus passedCase.status )
         ]
 
 
@@ -90,25 +127,101 @@ modelDecoder =
         (D.field "windowHeight" D.int)
         (D.succeed initialDateValue)
         (D.succeed initialDateValue)
-        (D.field "tasks" (D.list taskDecoder))
+        (D.field "tasks" (D.list taskValueDecoder))
         (D.succeed Nothing)
         (D.succeed Nothing)
 
 
 initialDateValue : Date
 initialDateValue =
-    Date.fromCalendarDate 2023 Mar 12
+    Date.fromCalendarDate 2000 Jan 1
 
 
-taskDecoder : D.Decoder TaskValue
-taskDecoder =
-    D.map6 TaskValue
+taskValueDecoder : D.Decoder TaskValue
+taskValueDecoder =
+    D.oneOf
+        [ singleTaskDecoder |> D.map (\value -> Single value)
+        , slideTaskDecoder |> D.map (\value -> Slide value)
+        , cronTaskDecoder |> D.map (\value -> CronType value)
+        ]
+
+
+cronTaskDecoder : D.Decoder CronTask
+cronTaskDecoder =
+    D.map8 CronTask
+        (D.field "value" D.string)
+        (D.field "createdDate" D.string |> D.andThen dateDecode)
+        (D.field "editDate" D.string |> D.andThen dateDecode)
+        (D.field "startDate" D.string |> D.andThen dateDecode)
+        (D.field "endDate" D.string |> D.andThen dateDecode)
+        (D.field "cron" D.string |> D.andThen cronDecode)
+        (D.succeed "")
+        (D.field "cases" (D.list passedCaseDecoder))
+        |> D.map (\v -> v ( Nothing, Nothing ))
+
+
+slideTaskDecoder : D.Decoder SlideTask
+slideTaskDecoder =
+    D.map7 SlideTask
+        (D.field "value" D.string)
+        (D.field "createdDate" D.string |> D.andThen dateDecode)
+        (D.field "editDate" D.string |> D.andThen dateDecode)
+        (D.field "startDate" D.string |> D.andThen dateDecode)
+        (D.field "endDate" D.string |> D.andThen dateDecode)
+        (D.field "status" slideTaskStatusDecoder)
+        (D.succeed Nothing)
+
+
+slideTaskStatusDecoder : D.Decoder SlideTaskStatus
+slideTaskStatusDecoder =
+    D.oneOf
+        [ D.string |> D.andThen (mapToSlideTaskStatus "active")
+        , D.map2 (\_ date -> SlideDone date)
+            (D.field "value" (D.string |> D.andThen (mapToSlideTaskStatus "done")))
+            (D.field "date" D.string |> D.andThen dateDecode)
+        , D.map2 (\_ date -> SlideCancel date)
+            (D.field "value" (D.string |> D.andThen (mapToSlideTaskStatus "cancel")))
+            (D.field "date" D.string |> D.andThen dateDecode)
+        ]
+
+
+mapToSlideTaskStatus : String -> String -> D.Decoder SlideTaskStatus
+mapToSlideTaskStatus statusValue value =
+    if value == statusValue then
+        D.succeed SlideActive
+
+    else
+        D.fail <| "Not able to parse task status: " ++ value
+
+
+singleTaskDecoder : D.Decoder SingleTask
+singleTaskDecoder =
+    D.map5 SingleTask
         (D.field "value" D.string)
         (D.field "createdDate" D.string |> D.andThen dateDecode)
         (D.field "editDate" D.string |> D.andThen dateDecode)
         (D.field "date" D.string |> D.andThen dateDecode)
-        (D.field "taskType" taskTypeDecoder)
-        (D.succeed [])
+        (D.field "status" singleTaskStatusDecoder)
+
+
+singleTaskStatusDecoder : D.Decoder SingleTaskStatus
+singleTaskStatusDecoder =
+    D.string |> D.andThen mapToSingleTaskStatus
+
+
+mapToSingleTaskStatus : String -> D.Decoder SingleTaskStatus
+mapToSingleTaskStatus value =
+    if value == "active" then
+        D.succeed SingleActive
+
+    else if value == "done" then
+        D.succeed SingleDone
+
+    else if value == "cancel" then
+        D.succeed SingleCancel
+
+    else
+        D.fail <| "Not able to parse task status: " ++ value
 
 
 dateDecode : String -> D.Decoder Date
@@ -119,51 +232,6 @@ dateDecode dateString =
 
         Err error ->
             D.fail error
-
-
-taskTypeDecoder : D.Decoder TaskType
-taskTypeDecoder =
-    D.oneOf
-        [ taskStatusDecoder |> D.map (\value -> Single value)
-        , slideDecoder |> D.map (\value -> Slide value)
-        , cronTypeDecoder |> D.map (\value -> CronType value)
-        ]
-
-
-taskStatusDecoder : D.Decoder TaskStatus
-taskStatusDecoder =
-    D.string |> D.andThen mapToTaskStatus
-
-
-mapToTaskStatus : String -> D.Decoder TaskStatus
-mapToTaskStatus value =
-    if value == "active" then
-        D.succeed Active
-
-    else if value == "done" then
-        D.succeed Done
-
-    else if value == "cancel" then
-        D.succeed Cancel
-
-    else
-        D.fail <| "Not able to parse task status: " ++ value
-
-
-slideDecoder : D.Decoder SlideTaskValue
-slideDecoder =
-    D.map2 SlideTaskValue
-        (D.field "endDate" D.string |> D.andThen dateDecode)
-        (D.field "status" taskStatusDecoder)
-
-
-cronTypeDecoder : D.Decoder CronTaskValue
-cronTypeDecoder =
-    D.map4 CronTaskValue
-        (D.field "cron" D.string |> D.andThen cronDecode)
-        (D.succeed "")
-        (D.field "endDate" D.string |> D.andThen dateDecode)
-        (D.field "cases" (D.list passedCaseDecoder))
 
 
 cronDecode : String -> D.Decoder Cron
@@ -180,4 +248,21 @@ passedCaseDecoder : D.Decoder PassedCase
 passedCaseDecoder =
     D.map2 PassedCase
         (D.field "date" D.string |> D.andThen dateDecode)
-        (D.field "status" taskStatusDecoder)
+        (D.field "status" cronTaskStatusDecoder)
+
+
+cronTaskStatusDecoder : D.Decoder CronTaskStatus
+cronTaskStatusDecoder =
+    D.string |> D.andThen mapToCronTaskStatus
+
+
+mapToCronTaskStatus : String -> D.Decoder CronTaskStatus
+mapToCronTaskStatus value =
+    if value == "done" then
+        D.succeed CronDone
+
+    else if value == "cancel" then
+        D.succeed CronCancel
+
+    else
+        D.fail <| "Not able to parse task status: " ++ value
