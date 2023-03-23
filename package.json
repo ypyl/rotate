@@ -7,11 +7,12 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "neu": "neu run --frontend-lib-dev",
-    "neu-release": "neu build --release",
-    "neu-run": "neu run"
+    "neu": "npx @neutralinojs/neu run --frontend-lib-dev",
+    "neu-release": "npx @neutralinojs/neu build --release",
+    "neu-run": "npx @neutralinojs/neu run"
   },
   "devDependencies": {
+    "@neutralinojs/neu": "^9.5.0",
     "elm": "^0.19.1-5",
     "typescript": "^4.9.3",
     "vite": "^4.0.0",
