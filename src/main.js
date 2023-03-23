@@ -3,8 +3,21 @@ import { Elm } from "./Main.elm";
 const tasksFileName = './tasks.json'
 
 try {
-  window.Neutralino.init();
+  window.Neutralino.init()
 } catch (err) {
+  console.error(err)
+}
+
+try {
+  let url = "http://example.com/updater_test/update_manifest.json"
+  let manifest = await Neutralino.updater.checkForUpdates(url)
+
+  if (manifest.version != NL_APPVERSION) {
+      await Neutralino.updater.install()
+      await Neutralino.app.restartProcess()
+  }
+}
+catch(err) {
   console.error(err)
 }
 
@@ -34,6 +47,5 @@ app.ports.setState.subscribe(async function (state) {
     await Neutralino.filesystem.writeFile(tasksFileName, JSON.stringify(state, null, 2))
   } catch (err) {
     console.error(err)
-
   }
 });
