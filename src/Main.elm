@@ -265,7 +265,7 @@ update msg model =
         EditTaskType radioType ->
             case model.editTask of
                 Just (EditTask taskDate originalTask task) ->
-                    ( { model | editTask = Just (EditTask taskDate originalTask (radioTypeToTaskType originalTask task radioType)) }, Cmd.none )
+                    ( { model | editTask = Just (EditTask taskDate originalTask (radioTypeToTaskType task radioType)) }, Cmd.none )
 
                 Nothing ->
                     ( model, Cmd.none )
@@ -810,8 +810,8 @@ taskTypeToRadioType taskValue =
             SlideRadio
 
 
-radioTypeToTaskType : TaskValue -> TaskValue -> RadioType -> TaskValue
-radioTypeToTaskType originalTask currentTask radioType =
+radioTypeToTaskType : TaskValue -> RadioType -> TaskValue
+radioTypeToTaskType currentTask radioType =
     case ( radioType, currentTask ) of
         ( SingleRadio, Slide slideTask ) ->
             mapSlideTaskToSingle slideTask |> Single

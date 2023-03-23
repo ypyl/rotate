@@ -3,7 +3,6 @@ module Mappers exposing (..)
 import Cron exposing (Atom(..), Cron(..), Expr(..), Month(..), Term(..), WeekDay(..))
 import Date exposing (Date, day, month, monthToNumber, weekday, weekdayToNumber)
 import Model exposing (CronTask, CronTaskStatus(..), SingleTask, SingleTaskStatus(..), SlideTask, SlideTaskStatus(..), TaskStatus(..))
-import Model exposing (TaskValue)
 
 
 cronToString : Cron -> String
