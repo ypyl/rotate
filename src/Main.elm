@@ -220,9 +220,11 @@ update msg model =
 
                                 Single singleTask ->
                                     Single { singleTask | editDate = model.today }
+
+                        updatedModel = { model | tasks = replaceTask originalTask renewEditDate model.tasks, editTask = Nothing }
                     in
-                    ( { model | tasks = replaceTask originalTask renewEditDate model.tasks, editTask = Nothing }
-                    , model |> encodeModel |> setState
+                    ( updatedModel
+                    , updatedModel |> encodeModel |> setState
                     )
 
                 Nothing ->
