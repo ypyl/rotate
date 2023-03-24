@@ -211,22 +211,22 @@ generateRowsForMonth today monthValue startDate =
 
 
 monthView : Date -> Year -> Element Msg
-monthView today year =
+monthView today yearValue =
     let
         fontColor m =
-            if m == month today then
+            if m == month today && yearValue == year today then
                 blue
 
             else
                 black
 
         monthBtn m =
-            button [ width (px 60), Font.color (fontColor m) ] { onPress = Just (ShowDayView m year), label = el [ centerX ] (text (monthToShortStr m)) }
+            button [ width (px 60), Font.color (fontColor m) ] { onPress = Just (ShowDayView m yearValue), label = el [ centerX ] (text (monthToShortStr m)) }
     in
     column [ Background.color white, Border.color black, Border.width 1, Border.rounded 5, spacing 20, padding 5 ]
         [ row [ width fill ]
             [ el [ width (px cellWidth), alignLeft ] (button [ width fill ] { onPress = Just Previous, label = el [ centerX ] (text "<") })
-            , el [ width fill, centerX ] (button [ width fill ] { onPress = Just (ShowYearView year), label = el [ centerX ] (text (String.fromInt year)) })
+            , el [ width fill, centerX ] (button [ width fill ] { onPress = Just (ShowYearView yearValue), label = el [ centerX ] (text (String.fromInt yearValue)) })
             , el [ width (px cellWidth), alignRight ] (button [ width fill ] { onPress = Just Next, label = el [ centerX ] (text ">") })
             ]
         , row [ spacing spacingValue, width fill ] ([ Jan, Feb, Mar, Apr ] |> List.map monthBtn)

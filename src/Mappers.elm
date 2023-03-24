@@ -474,7 +474,7 @@ mapSingleTaskToCron singleTask =
         singleTask.date
         singleTask.date
         (Cron Every Every Every Every Every)
-        ""
+        "* * *"
         []
         ( Nothing, Nothing )
 

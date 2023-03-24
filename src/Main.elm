@@ -288,7 +288,7 @@ update msg model =
                                     CronType { cronTask | cron = newCron, cronEditValue = cronToString newCron, error = ( cronTask.error |> Tuple.first, Nothing ) }
 
                                 Err _ ->
-                                    CronType { cronTask | error = ( cronTask.error |> Tuple.first, Just incorrectCronError ) }
+                                    CronType { cronTask | cronEditValue = cronValue, error = ( cronTask.error |> Tuple.first, Just incorrectCronError ) }
                     in
                     ( { model | editTask = Just (EditTask taskDate originalTask updatedTask) }, Cmd.none )
 
