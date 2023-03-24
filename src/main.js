@@ -9,7 +9,7 @@ try {
 }
 
 try {
-  const url = "http://example.com/updater_test/update_manifest.json"
+  const url = "https://raw.githubusercontent.com/ypyl/rotate/master/update.json"
   const manifest = await Neutralino.updater.checkForUpdates(url)
 
   if (manifest.version != NL_APPVERSION) {
