@@ -1,7 +1,7 @@
 {
     "applicationId": "elm.neutralino.rotate",
     "version": "1.0.3",
-    "resourcesURL": "https://github.com/ypyl/rotate/releases/download/v1.0.3/resources.neu",
+    "resourcesURL": "https://objects.githubusercontent.com/github-production-release-asset-2e65be/618126410/46b2f7af-b2f0-4140-aa1d-89c7f3d91a36?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAIWNJYAX4CSVEH53A/20230324/us-east-1/s3/aws4_request&X-Amz-Date=20230324T200426Z&X-Amz-Expires=300&X-Amz-Signature=5ebd666bdc011da125eff6522b8c4d805e0f895123886ac6c0c4af45c124cbe0&X-Amz-SignedHeaders=host&actor_id=0&key_id=0&repo_id=618126410&response-content-disposition=attachment; filename=resources.neu&response-content-type=application/octet-stream",
     "data": {
     }
 }
