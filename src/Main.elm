@@ -788,11 +788,6 @@ inputValueView value =
         }
 
 
-defaultCron : Cron
-defaultCron =
-    Cron.Cron Cron.Every Cron.Every Cron.Every Cron.Every Cron.Every
-
-
 type RadioType
     = SingleRadio
     | CronRadio
