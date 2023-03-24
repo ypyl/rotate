@@ -9,16 +9,16 @@ try {
 }
 
 try {
-  let url = "http://example.com/updater_test/update_manifest.json"
-  let manifest = await Neutralino.updater.checkForUpdates(url)
+  const url = "http://example.com/updater_test/update_manifest.json"
+  const manifest = await Neutralino.updater.checkForUpdates(url)
 
   if (manifest.version != NL_APPVERSION) {
       await Neutralino.updater.install()
       await Neutralino.app.restartProcess()
   }
 }
-catch(err) {
-  console.error(err)
+catch (err) {
+  console.log(err)
 }
 
 let tasks = [];
@@ -27,7 +27,7 @@ try {
   const parsedModel = JSON.parse(data)
   tasks = parsedModel.tasks
 } catch (err) {
-  console.error(err)
+  console.log(err)
 }
 
 
@@ -46,6 +46,6 @@ app.ports.setState.subscribe(async function (state) {
   try {
     await Neutralino.filesystem.writeFile(tasksFileName, JSON.stringify(state, null, 2))
   } catch (err) {
-    console.error(err)
+    console.log(err)
   }
 });

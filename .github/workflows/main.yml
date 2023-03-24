@@ -33,4 +33,6 @@ jobs:
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
-          files: dist/rotate-release.zip
+          files: |
+            dist/rotate-release.zip
+            dist/rotate/resources.neu
