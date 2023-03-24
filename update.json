@@ -1,7 +1,7 @@
 {
     "applicationId": "elm.neutralino.rotate",
-    "version": "1.0.0",
-    "resourcesURL": "http://example.com/updater_test/update_res.neu",
+    "version": "1.0.1",
+    "resourcesURL": "https://github.com/ypyl/rotate/releases/download/v1.0.1/resources.neu",
     "data": {
     }
 }
