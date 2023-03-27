@@ -45,6 +45,7 @@ jobs:
           git fetch
           git checkout master
           npm run sync-version
+          npm install
           npm run build
           npm run neu-build
           cp -f ./dist/rotate/resources.neu ./resources.neu
