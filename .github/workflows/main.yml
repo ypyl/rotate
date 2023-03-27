@@ -40,12 +40,6 @@ jobs:
             dist/rotate-release.zip
             dist/rotate/resources.neu
 
-      - name: Sync version
-        run: npm run sync-version
-
-      - name: Copy resource file
-        run: cp -f ./dist/rotate/resources.neu ./resources.neu
-
       - uses: actions/checkout@v3
       - name: Commit release
         run: |
@@ -53,5 +47,7 @@ jobs:
           git config --global user.email 'yauhen.pyl@gmail.com'
           git fetch
           git checkout master
+          npm run sync-version
+          cp -f ./dist/rotate/resources.neu ./resources.neu
           git commit -am "Automated release"
           git push
