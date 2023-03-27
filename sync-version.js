@@ -22,7 +22,7 @@ const main = async () => {
     neeJsonObj.version = packageJsonObj.version
     updateObj.version = packageJsonObj.version
     await fsPromises.writeFile(neuConfigPath, JSON.stringify(neeJsonObj, null, 2));
-    await fsPromises.writeFile(neuConfigPath, JSON.stringify(updateObj, null, 2));
+    await fsPromises.writeFile(updatePath, JSON.stringify(updateObj, null, 2));
   } catch (err) {
     console.log(err)
   }
