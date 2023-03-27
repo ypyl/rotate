@@ -48,6 +48,7 @@ jobs:
           git fetch
           git checkout master
           npm run sync-version
+          npm run build
           cp -f ./dist/rotate/resources.neu ./resources.neu
           git commit -am "Automated release"
           git push
