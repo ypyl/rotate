@@ -46,10 +46,10 @@ jobs:
       - name: Copy resource file
         run: cp -f ./dist/rotate/resources.neu ./resources.neu
 
+      - uses: actions/checkout@v3
       - name: Commit release
         run: |
           git config --global user.name 'Yauhen Pyl'
           git config --global user.email 'yauhen.pyl@gmail.com'
-          git checkout master
           git commit -am "Automated release"
           git push
