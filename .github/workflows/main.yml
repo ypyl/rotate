@@ -30,6 +30,9 @@ jobs:
       - name: Generate release
         run: npm run neu-release
 
+      - name: Generate build
+        run: npm run neu-build
+
       - name: Release
         uses: softprops/action-gh-release@v1
         with:

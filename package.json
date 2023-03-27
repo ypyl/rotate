@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "neu": "npx @neutralinojs/neu run --frontend-lib-dev",
     "neu-release": "npx @neutralinojs/neu build --release",
+    "neu-build": "npx @neutralinojs/neu build",
     "neu-run": "npx @neutralinojs/neu run",
     "sync-version": "node ./sync-version.js"
   },
