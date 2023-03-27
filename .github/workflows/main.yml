@@ -37,7 +37,7 @@ jobs:
             dist/rotate-release.zip
             dist/rotate/resources.neu
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v2
       - name: Commit release
         run: |
           git config --global user.name 'Yauhen Pyl'
