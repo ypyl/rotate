@@ -30,6 +30,12 @@ jobs:
       - name: Generate release
         run: npm run neu-release
 
+      - name: Generate build
+        run: npm run neu-build
+
+      - name: Copy build
+        run: cp -f ./dist/rotate/resources.neu ~/resources.neu
+
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
@@ -44,11 +50,8 @@ jobs:
           git config --global user.email 'yauhen.pyl@gmail.com'
           git fetch
           git checkout master
-          npm update -g npm
           npm run sync-version
           npm ci
-          npm run build
-          npm run neu-build
-          cp -f ./dist/rotate/resources.neu ./resources.neu
+          cp -f ~/resources.neu ./resources.neu
           git commit -am "Automated release"
           git push
