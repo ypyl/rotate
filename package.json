@@ -1,7 +1,7 @@
 {
   "name": "elm-weektodo",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.3",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "neu": "npx @neutralinojs/neu run --frontend-lib-dev",
     "neu-release": "npx @neutralinojs/neu build --release",
-    "neu-run": "npx @neutralinojs/neu run"
+    "neu-run": "npx @neutralinojs/neu run",
+    "sync-version": "node ./sync-version.js"
   },
   "devDependencies": {
     "@neutralinojs/neu": "^9.5.0",

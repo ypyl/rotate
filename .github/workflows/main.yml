@@ -36,3 +36,16 @@ jobs:
           files: |
             dist/rotate-release.zip
             dist/rotate/resources.neu
+
+      - name: Sync version
+        run: npm run sync-version
+
+      - name: Copy resource file
+        run: cp -rf /dist/rotate/resources.neu /resources.neu
+
+      - name: Commit release
+        run: |
+          git config --global user.name 'Yauhen Pyl'
+          git config --global user.email 'yauhen.pyl@gmail.com'
+          git commit -am "Automated release"
+          git push

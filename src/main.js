@@ -16,8 +16,7 @@ try {
       await Neutralino.updater.install()
       await Neutralino.app.restartProcess()
   }
-}
-catch (err) {
+} catch (err) {
   console.log(err)
 }
 
