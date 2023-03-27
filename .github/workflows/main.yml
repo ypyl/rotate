@@ -41,7 +41,7 @@ jobs:
         run: npm run sync-version
 
       - name: Copy resource file
-        run: cp -rf /dist/rotate/resources.neu /resources.neu
+        run: cp -rf /dist/rotate/resources.neu esources.neu
 
       - name: Commit release
         run: |
