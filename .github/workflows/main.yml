@@ -44,6 +44,7 @@ jobs:
           git config --global user.email 'yauhen.pyl@gmail.com'
           git fetch
           git checkout master
+          npm update -g npm
           npm run sync-version
           npm ci
           npm run build
