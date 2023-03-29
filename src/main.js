@@ -11,10 +11,11 @@ try {
 try {
   const url = "https://raw.githubusercontent.com/ypyl/rotate/master/update.json"
   const manifest = await Neutralino.updater.checkForUpdates(url)
-
+  console.log(`Current version is ${NL_APPVERSION}`);
+  console.log(`Latest version is ${manifest.version}`);
   if (manifest.version != NL_APPVERSION) {
-      await Neutralino.updater.install()
-      await Neutralino.app.restartProcess()
+    await Neutralino.updater.install()
+    await Neutralino.app.restartProcess()
   }
 } catch (err) {
   console.log(err)
