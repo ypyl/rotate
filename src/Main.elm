@@ -233,7 +233,11 @@ update msg model =
         DeleteTask ->
             case model.editTask of
                 Just (EditTask _ originalTask _) ->
-                    ( { model | tasks = deleteTask originalTask model.tasks, editTask = Nothing }, Cmd.none )
+                    let
+                        updatedModel = { model | tasks = deleteTask originalTask model.tasks, editTask = Nothing }
+                    in
+                    ( updatedModel
+                    , updatedModel |> encodeModel |> setState )
 
                 Nothing ->
                     ( model, Cmd.none )
