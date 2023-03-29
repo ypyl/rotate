@@ -24,6 +24,9 @@ jobs:
       - name: Npm install
         run: npm ci
 
+      - name: Sync versions
+        run: npm run sync-version
+
       - name: Generate dict
         run: npm run build
 
@@ -41,7 +44,6 @@ jobs:
         with:
           files: |
             dist/rotate-release.zip
-            dist/rotate/resources.neu
 
       - uses: actions/checkout@v2
       - name: Commit release
