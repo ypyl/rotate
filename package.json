@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "release": "npm version patch && git push --tags",
     "neu": "npx @neutralinojs/neu run --frontend-lib-dev",
     "neu-release": "npx @neutralinojs/neu build --release",
     "neu-build": "npx @neutralinojs/neu build",
