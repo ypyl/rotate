@@ -14,6 +14,7 @@ try {
   console.log(`Current version is ${NL_APPVERSION}`);
   console.log(`Latest version is ${manifest.version}`);
   if (manifest.version != NL_APPVERSION) {
+    console.log(`Updating app to ${manifest.version}`);
     await Neutralino.updater.install()
     await Neutralino.app.restartProcess()
   }
