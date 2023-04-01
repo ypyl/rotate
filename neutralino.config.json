@@ -19,7 +19,8 @@
       "minWidth": 1000,
       "minHeight": 800,
       "icon": "/dist/rotate.png",
-      "enableInspector": false
+      "enableInspector": false,
+      "borderless": false
     }
   },
   "cli": {

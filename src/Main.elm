@@ -399,6 +399,7 @@ taskValueView extraAttr ( taskDate, task ) =
          , paddingXY 3 0
          , onDoubleClick (EditTaskMsg taskDate task)
          , Html.Attributes.class "no-select" |> Element.htmlAttribute
+         , style "overflow" "hidden" |> Element.htmlAttribute
          ]
             ++ extraAttr task
         )
@@ -582,11 +583,11 @@ dayInput date datePickerType dt =
                 Nothing ->
                     none
     in
-    button [ paddingXY 0 5, focused [] ]
+    button [ paddingXY 0 5, focused [], height (px dayTitleSize) ]
         { onPress = ShowDatePicker date datePickerType |> Just
         , label =
             row []
-                [ el [ paddingEach { top = 5, left = 0, right = 10, bottom = 5 }, height (px dayTitleSize), centerX ] (text (format "E, d MMM y" date))
+                [ el [ paddingEach { top = 5, left = 0, right = 10, bottom = 5 }, centerX ] (text (format "E, d MMM y" date))
                 , svg
                     [ style "vertical-align" "middle"
                     , TSA.width <| Px 24

@@ -5,7 +5,7 @@ import Element exposing (px)
 
 dayTitleSize : number
 dayTitleSize =
-    30
+    32
 
 
 taskSize : number
