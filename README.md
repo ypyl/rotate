@@ -1,5 +1,7 @@
 # Rotate
 
+![img](./6uYcsaJqui.png)
+
 Rotate is a weekly todo application that allows you to create and manage tasks. You can create three types of tasks:
 
 1. Simple Task: A task with a fixed date that needs to be completed by that date.
