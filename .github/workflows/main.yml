@@ -39,17 +39,17 @@ jobs:
       - name: Copy build
         run: Copy-Item -Path .\dist\rotate\resources.neu -Destination ~\resources.neu
 
-      - name: Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            dist/rotate-release.zip
-
       - name: Add icon to win exe
         run: |
           Expand-Archive -Path .\dist\rotate-release.zip -DestinationPath .\release
           .\rcedit-x64.exe .\release\rotate-win_x64.exe --set-icon .\public\favicon.ico
           Compress-Archive -Path .\release -DestinationPath .\dist\rotate-release.zip -Force
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            .\dist\rotate-release.zip
 
       - uses: actions/checkout@v2
       - name: Commit release
