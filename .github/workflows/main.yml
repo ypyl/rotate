@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   publish:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - name: Check out
         uses: actions/checkout@v2
@@ -37,13 +37,19 @@ jobs:
         run: npm run neu-build
 
       - name: Copy build
-        run: cp -f ./dist/rotate/resources.neu ~/resources.neu
+        run: Copy-Item -Path .\dist\rotate\resources.neu -Destination ~\resources.neu
 
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
             dist/rotate-release.zip
+
+      - name: Add icon to win exe
+        run: |
+          Expand-Archive -Path .\dist\rotate-release.zip -DestinationPath .\release
+          .\rcedit-x64.exe .\release\rotate-win_x64.exe --set-icon .\public\favicon.ico
+          Compress-Archive -Path .\release -DestinationPath .\dist\rotate-release.zip -Force
 
       - uses: actions/checkout@v2
       - name: Commit release
@@ -54,6 +60,6 @@ jobs:
           git checkout master
           npm run sync-version
           npm ci
-          cp -f ~/resources.neu ./resources.neu
+          Copy-Item -Path ~/resources.neu -Destination ./resources.neu
           git commit -am "Automated release"
           git push
