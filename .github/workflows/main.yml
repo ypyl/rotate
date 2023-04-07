@@ -49,7 +49,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            .\dist\rotate-release.zip
+            dist/rotate-release.zip
 
       - uses: actions/checkout@v2
       - name: Commit release
