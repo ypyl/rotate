@@ -16,6 +16,8 @@ To install Rotate, follow these steps:
 - Unzip the downloaded file.
 - Double-click on the executable file to start the application.
 
+All releases are done automatically via GitHub actions so you are downloading the app built from the source code that you can always check.
+
 That's it! The application should now be up and running on your desktop.
 
 ## Usage
