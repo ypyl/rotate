@@ -11,19 +11,19 @@ if (typeof NL_APPVERSION === "undefined") {
     console.error(err)
   }
 
-  try {
-    const url = "https://raw.githubusercontent.com/ypyl/rotate/master/update.json"
-    const manifest = await Neutralino.updater.checkForUpdates(url)
-    console.log(`Current version is ${NL_APPVERSION}`);
-    console.log(`Latest version is ${manifest.version}`);
-    if (manifest.version != NL_APPVERSION) {
-      console.log(`Updating app to ${manifest.version}`);
-      await Neutralino.updater.install()
-      await Neutralino.app.restartProcess()
-    }
-  } catch (err) {
-    console.log(err)
-  }
+  // try {
+  //   const url = "https://raw.githubusercontent.com/ypyl/rotate/master/update.json"
+  //   const manifest = await Neutralino.updater.checkForUpdates(url)
+  //   console.log(`Current version is ${NL_APPVERSION}`);
+  //   console.log(`Latest version is ${manifest.version}`);
+  //   if (manifest.version != NL_APPVERSION) {
+  //     console.log(`Updating app to ${manifest.version}`);
+  //     await Neutralino.updater.install()
+  //     await Neutralino.app.restartProcess()
+  //   }
+  // } catch (err) {
+  //   console.log(err)
+  // }
 
   let tasks = [];
   try {

@@ -18,7 +18,7 @@
       "height": 1000,
       "minWidth": 1000,
       "minHeight": 800,
-      "icon": "/dist/rotate.png",
+      "icon": "/dist/rotate.jpg",
       "enableInspector": false,
       "borderless": false
     }
