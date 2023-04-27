@@ -3,6 +3,7 @@ module Model exposing (..)
 import Cron exposing (Cron)
 import Date exposing (Date)
 import DatePicker as DT
+import TimeOnly exposing (TimeOnly)
 
 
 type alias Model =
@@ -38,6 +39,7 @@ type alias SingleTask =
     , editDate : Date
     , date : Date
     , status : SingleTaskStatus
+    , time : Maybe TimeOnly
     }
 
 

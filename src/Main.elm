@@ -4,10 +4,10 @@ import Browser
 import Browser.Events exposing (onResize)
 import Colors exposing (black, blue, gray, grayColorbackground, red, white)
 import Config exposing (dayTitleSize, modalSecondColumnWidth, taskSize, weekDayWidth)
-import Cron exposing (Cron, WeekDay(..), fromString)
+import Cron exposing (WeekDay(..), fromString)
 import Date exposing (Date, Unit(..), add, format, isBetween, today)
 import DatePicker as DT
-import Element exposing (Element, alignLeft, alignRight, below, centerX, centerY, column, el, fill, focused, height, html, inFront, layout, map, none, padding, paddingEach, paddingXY, paragraph, px, rgb255, row, spacing, text, width)
+import Element exposing (Element, alignBottom, alignLeft, alignRight, below, centerX, centerY, column, el, fill, focused, height, html, inFront, layout, map, none, padding, paddingEach, paddingXY, paragraph, px, rgb255, row, spacing, text, width)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Events exposing (onClick, onDoubleClick, onMouseEnter, onMouseLeave)
@@ -22,6 +22,8 @@ import Model exposing (CronTask, CronTaskStatus(..), DatePickerType(..), EditTas
 import Sync exposing (encodeModel, modelDecoder, setState)
 import Task
 import Time exposing (Month(..))
+import TimeOnly as TO
+import TimePicker as TP
 import TypedSvg exposing (path, svg)
 import TypedSvg.Attributes as TSA
 import TypedSvg.Types exposing (Length(..), Paint(..), StrokeLinecap(..), StrokeLinejoin(..))
@@ -100,6 +102,7 @@ type Msg
     | EditTaskStatus TaskStatus
     | DeleteTask
     | DT DT.Msg
+    | TP TP.Msg
     | ShowDatePicker Date DatePickerType
     | CloseDatePicker
     | MouseInDatePicker Bool
@@ -181,6 +184,22 @@ update msg model =
                 Nothing ->
                     ( model, Cmd.none )
 
+        TP subMsg ->
+            case model.editTask of
+                Just (EditTask taskDate originalTask updatedTask) ->
+                    case updatedTask of
+                        Single t ->
+                            let
+                                updateModel =
+                                    { t | time = TP.update subMsg t.time }
+                            in
+                                ({ model | editTask = Just (EditTask taskDate originalTask (Single updateModel)) }, Cmd.none )
+                        _ ->
+                            ( model, Cmd.none )
+
+                Nothing ->
+                    ( model, Cmd.none )
+
         ShowDatePicker date datePickerType ->
             ( { model | dt = Just ( datePickerType, DT.create date, True ) }, Cmd.none )
 
@@ -221,7 +240,8 @@ update msg model =
                                 Single singleTask ->
                                     Single { singleTask | editDate = model.today }
 
-                        updatedModel = { model | tasks = replaceTask originalTask renewEditDate model.tasks, editTask = Nothing }
+                        updatedModel =
+                            { model | tasks = replaceTask originalTask renewEditDate model.tasks, editTask = Nothing }
                     in
                     ( updatedModel
                     , updatedModel |> encodeModel |> setState
@@ -234,10 +254,12 @@ update msg model =
             case model.editTask of
                 Just (EditTask _ originalTask _) ->
                     let
-                        updatedModel = { model | tasks = deleteTask originalTask model.tasks, editTask = Nothing }
+                        updatedModel =
+                            { model | tasks = deleteTask originalTask model.tasks, editTask = Nothing }
                     in
                     ( updatedModel
-                    , updatedModel |> encodeModel |> setState )
+                    , updatedModel |> encodeModel |> setState
+                    )
 
                 Nothing ->
                     ( model, Cmd.none )
@@ -266,7 +288,7 @@ update msg model =
                     ( model, Cmd.none )
 
         EditTaskMsg taskDate task ->
-            ( { model | editTask = Just (EditTask taskDate task task) }, Cmd.none )
+            ( { model | editTask = Just (EditTask taskDate task task)}, Cmd.none )
 
         EditTaskType radioType ->
             case model.editTask of
@@ -399,27 +421,62 @@ taskValueView extraAttr ( taskDate, task ) =
          , paddingXY 3 0
          , onDoubleClick (EditTaskMsg taskDate task)
          , Html.Attributes.class "no-select" |> Element.htmlAttribute
-         , style "overflow" "hidden" |> Element.htmlAttribute
          ]
             ++ extraAttr task
         )
-        ((case task of
-            Single t ->
-                t.value
+        (taskValueWithTime task)
 
-            Slide t ->
-                t.value
 
-            CronType t ->
-                t.value
-         )
-            |> text
-        )
+taskValueWithTime : TaskValue -> Element Msg
+taskValueWithTime value =
+    let
+        withoutTime txt =
+            el [ width fill, style "overflow" "hidden" |> Element.htmlAttribute ] <| text txt
+    in
+    case value of
+        Single t ->
+            case t.time of
+                Just timeValue ->
+                    row [ width fill, centerY ]
+                        [ withoutTime t.value
+                        , timeOnlyView timeValue
+                        ]
+
+                Nothing ->
+                    withoutTime t.value
+
+        Slide t ->
+            withoutTime t.value
+
+        CronType t ->
+            withoutTime t.value
+
+
+timeOnlyView : TO.TimeOnly -> Element Msg
+timeOnlyView timeOnly =
+    row [ alignRight, alignBottom ]
+        [ svg
+            [ style "vertical-align" "middle"
+            , TSA.width <| Px 16
+            , TSA.height <| Px 16
+            , TSA.viewBox 0 0 24 24
+            , TSA.strokeWidth <| Px 1
+            , TSA.fill PaintNone
+            , TSA.strokeLinecap StrokeLinecapRound
+            , TSA.strokeLinejoin StrokeLinejoinRound
+            ]
+            [ path [ TSA.stroke PaintNone, TSA.d "M0 0h24v24H0z", TSA.fill PaintNone ] []
+            , path [ TSA.d "M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0" ] []
+            , path [ TSA.d "M12 7v5l3 3" ] []
+            ]
+            |> html
+        , TO.toString timeOnly |> text |> el [ Font.italic, Font.size 14, alignBottom ]
+        ]
 
 
 emptyTaskValue : Date -> ( Date, TaskValue )
 emptyTaskValue date =
-    ( date, SingleTask "" date date date SingleActive |> Single )
+    ( date, SingleTask "" date date date SingleActive Nothing |> Single )
 
 
 weekDay : Model -> Int -> Element Msg
@@ -583,7 +640,7 @@ dayInput date datePickerType dt =
                 Nothing ->
                     none
     in
-    button [ paddingXY 0 5, focused [], height (px dayTitleSize) ]
+    button [ focused [], height (px dayTitleSize), centerY ]
         { onPress = ShowDatePicker date datePickerType |> Just
         , label =
             row []
@@ -674,11 +731,17 @@ editTaskView alreadyPassed isNewTask editDate taskValue dt =
 
         errors =
             getErrors taskValue
+
+        timeView =
+            case taskValue of
+                Single t ->
+                    t.time |> TP.view |> el [ alignRight ] |> map TP
+                _ -> none
     in
     column [ width fill, padding 10, spacing 10 ]
         [ row twoRowAttr [ inputTaskStatusView alreadyPassed editDate taskValue, el [ alignRight ] (inputDateView startDate EditStartDate dt) ]
         , row twoRowAttr [ inputValueView (getValue taskValue), el [ alignRight ] (endDateView taskValue EditEndDate dt) ]
-        , row twoRowAttr [ inputTaskTypeView taskValue ]
+        , row twoRowAttr [ inputTaskTypeView taskValue, timeView ]
         , case taskValue of
             CronType cronTask ->
                 if List.isEmpty errors then

@@ -42,6 +42,7 @@ red : Color
 red =
     rgb255 239 68 68
 
+
 lightRed : Color
 lightRed =
     rgb255 252 165 165

@@ -10,7 +10,7 @@ dayTitleSize =
 
 taskSize : number
 taskSize =
-    20
+    24
 
 
 weekDayWidth : number

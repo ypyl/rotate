@@ -7,6 +7,7 @@ import Json.Encode as E
 import Mappers exposing (cronToString)
 import Model exposing (CronTask, CronTaskStatus(..), Model, PassedCase, SingleTask, SingleTaskStatus(..), SlideTask, SlideTaskStatus(..), TaskValue(..))
 import Time exposing (Month(..))
+import TimeOnly exposing (TimeOnly)
 
 
 port setState : E.Value -> Cmd msg
@@ -196,12 +197,13 @@ mapToSlideTaskStatus statusValue value =
 
 singleTaskDecoder : D.Decoder SingleTask
 singleTaskDecoder =
-    D.map5 SingleTask
+    D.map6 SingleTask
         (D.field "value" D.string)
         (D.field "createdDate" D.string |> D.andThen dateDecode)
         (D.field "editDate" D.string |> D.andThen dateDecode)
         (D.field "date" D.string |> D.andThen dateDecode)
         (D.field "status" singleTaskStatusDecoder)
+        (D.maybe (D.field "time" D.string |> D.andThen timeOnlyDecode))
 
 
 singleTaskStatusDecoder : D.Decoder SingleTaskStatus
@@ -266,3 +268,12 @@ mapToCronTaskStatus value =
 
     else
         D.fail <| "Not able to parse task status: " ++ value
+
+timeOnlyDecode : String -> D.Decoder TimeOnly
+timeOnlyDecode timeOnlyString =
+    case TimeOnly.fromString timeOnlyString of
+        Ok d ->
+            D.succeed d
+
+        Err _ ->
+            D.fail <| "Not able to parse " ++ timeOnlyString

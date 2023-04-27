@@ -500,6 +500,7 @@ mapSlideTaskToSingle slideTask =
         slideTask.editDate
         slideTask.startDate
         (mapSlideTaskStatusToSingleTaskStatus slideTask.status)
+        Nothing
 
 
 mapSlideTaskToCron : SlideTask -> CronTask
@@ -524,6 +525,7 @@ mapCronTaskToSingle cronTask =
         cronTask.editDate
         cronTask.startDate
         SingleActive
+        Nothing
 
 
 mapCronTaskToSlide : CronTask -> SlideTask
